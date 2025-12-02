@@ -1,7 +1,12 @@
 
 export interface Candidate {
     id: string
-    name: string
+    $id?: string
+    name?: string
+    firstName?: string
+    lastName?: string
+    title?: string
+    current_organization?: string
     email: string
     gender: string
     phone: string

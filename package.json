@@ -12,6 +12,7 @@
   "dependencies": {
     "@google/genai": "^1.30.0",
     "@hookform/resolvers": "^5.2.2",
+    "@qdrant/js-client-rest": "^1.16.2",
     "@radix-ui/react-accordion": "latest",
     "@radix-ui/react-alert-dialog": "latest",
     "@radix-ui/react-aspect-ratio": "latest",
@@ -41,6 +42,7 @@
     "@radix-ui/react-tooltip": "latest",
     "@vercel/analytics": "latest",
     "ai": "latest",
+    "appwrite": "^21.4.0",
     "autoprefixer": "^10.4.22",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

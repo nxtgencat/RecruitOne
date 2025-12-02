@@ -36,7 +36,7 @@ export default function CandidatesPage() {
 
     const handleSelectAll = (checked: boolean) => {
         if (checked) {
-            setSelectedIds(new Set(candidates.map((c) => c.id)))
+            setSelectedIds(new Set(candidates.map((c) => c.id || c.$id || '')))
         } else {
             setSelectedIds(new Set())
         }
@@ -52,10 +52,12 @@ export default function CandidatesPage() {
         setSelectedIds(newSelected)
     }
 
-    const filteredCandidates = candidates.filter((candidate) =>
-        candidate.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        candidate.email.toLowerCase().includes(searchQuery.toLowerCase())
-    )
+    const filteredCandidates = candidates.filter((candidate) => {
+        const fullName = candidate.name || `${candidate.firstName || ''} ${candidate.lastName || ''}`.trim();
+        const email = candidate.email || '';
+        return fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            email.toLowerCase().includes(searchQuery.toLowerCase());
+    });
 
 
 
@@ -140,61 +142,66 @@ export default function CandidatesPage() {
                                             </TableCell>
                                         </TableRow>
                                     ) : (
-                                        filteredCandidates.map((candidate) => (
-                                            <TableRow key={candidate.id} className="cursor-pointer hover:bg-muted/50" onClick={() => router.push(`/candidates/${candidate.id}`)}>
-                                                <TableCell onClick={(e) => e.stopPropagation()}>
-                                                    <Checkbox
-                                                        checked={selectedIds.has(candidate.id)}
-                                                        onCheckedChange={(checked) => handleSelectRow(candidate.id, checked as boolean)}
-                                                    />
-                                                </TableCell>
-                                                <TableCell className="font-medium">{candidate.name}</TableCell>
-                                                <TableCell>{candidate.email}</TableCell>
-                                                <TableCell>{candidate.phone}</TableCell>
-                                                <TableCell>{candidate.city}, {candidate.state}</TableCell>
-                                                <TableCell className="max-w-[200px] truncate" title={candidate.workHistory}>
-                                                    {candidate.workHistory}
-                                                </TableCell>
-                                                <TableCell>
-                                                    {candidate.callLog && candidate.callLog.length > 0 ? (
-                                                        <span className="text-xs text-muted-foreground">{candidate.callLog[candidate.callLog.length - 1]}</span>
-                                                    ) : (
-                                                        <span className="text-xs text-muted-foreground">-</span>
-                                                    )}
-                                                </TableCell>
-                                                <TableCell>
-                                                    {candidate.candidateResponse ? (
-                                                        <span className="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 border-transparent bg-secondary text-secondary-foreground hover:bg-secondary/80">
-                                                            {candidate.candidateResponse}
-                                                        </span>
-                                                    ) : (
-                                                        <span className="text-xs text-muted-foreground">-</span>
-                                                    )}
-                                                </TableCell>
-                                                <TableCell onClick={(e) => e.stopPropagation()}>
-                                                    <DropdownMenu>
-                                                        <DropdownMenuTrigger asChild>
-                                                            <Button variant="ghost" className="h-8 w-8 p-0">
-                                                                <span className="sr-only">Open menu</span>
-                                                                <MoreHorizontal className="h-4 w-4" />
-                                                            </Button>
-                                                        </DropdownMenuTrigger>
-                                                        <DropdownMenuContent align="end">
-                                                            <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                                                            <DropdownMenuItem onClick={() => router.push(`/candidates/${candidate.id}`)}>
-                                                                View Profile
-                                                            </DropdownMenuItem>
-                                                            <DropdownMenuItem>
-                                                                <Phone className="mr-2 h-4 w-4" />
-                                                                Call Candidate
-                                                            </DropdownMenuItem>
-                                                            <DropdownMenuSeparator />
-                                                            <DropdownMenuItem className="text-destructive">Delete Candidate</DropdownMenuItem>
-                                                        </DropdownMenuContent>
-                                                    </DropdownMenu>
-                                                </TableCell>
-                                            </TableRow>
-                                        ))
+                                        filteredCandidates.map((candidate) => {
+                                            const candidateId = candidate.id || candidate.$id || '';
+                                            return (
+                                                <TableRow key={candidateId} className="cursor-pointer hover:bg-muted/50" onClick={() => router.push(`/candidates/${candidateId}`)}>
+                                                    <TableCell onClick={(e) => e.stopPropagation()}>
+                                                        <Checkbox
+                                                            checked={selectedIds.has(candidateId)}
+                                                            onCheckedChange={(checked) => handleSelectRow(candidateId, checked as boolean)}
+                                                        />
+                                                    </TableCell>
+                                                    <TableCell className="font-medium">
+                                                        {candidate.name || `${candidate.firstName || ''} ${candidate.lastName || ''}`}
+                                                    </TableCell>
+                                                    <TableCell>{candidate.email}</TableCell>
+                                                    <TableCell>{candidate.phone}</TableCell>
+                                                    <TableCell>{candidate.city}, {candidate.state}</TableCell>
+                                                    <TableCell className="max-w-[200px] truncate" title={candidate.workHistory || `${candidate.title || ''} at ${candidate.current_organization || ''}`}>
+                                                        {candidate.workHistory || (candidate.title ? `${candidate.title}${candidate.current_organization ? ` at ${candidate.current_organization}` : ''}` : '-')}
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        {candidate.callLog && candidate.callLog.length > 0 ? (
+                                                            <span className="text-xs text-muted-foreground">{candidate.callLog[candidate.callLog.length - 1]}</span>
+                                                        ) : (
+                                                            <span className="text-xs text-muted-foreground">-</span>
+                                                        )}
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        {candidate.candidateResponse ? (
+                                                            <span className="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 border-transparent bg-secondary text-secondary-foreground hover:bg-secondary/80">
+                                                                {candidate.candidateResponse}
+                                                            </span>
+                                                        ) : (
+                                                            <span className="text-xs text-muted-foreground">-</span>
+                                                        )}
+                                                    </TableCell>
+                                                    <TableCell onClick={(e) => e.stopPropagation()}>
+                                                        <DropdownMenu>
+                                                            <DropdownMenuTrigger asChild>
+                                                                <Button variant="ghost" className="h-8 w-8 p-0">
+                                                                    <span className="sr-only">Open menu</span>
+                                                                    <MoreHorizontal className="h-4 w-4" />
+                                                                </Button>
+                                                            </DropdownMenuTrigger>
+                                                            <DropdownMenuContent align="end">
+                                                                <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                                                                <DropdownMenuItem onClick={() => router.push(`/candidates/${candidate.id}`)}>
+                                                                    View Profile
+                                                                </DropdownMenuItem>
+                                                                <DropdownMenuItem>
+                                                                    <Phone className="mr-2 h-4 w-4" />
+                                                                    Call Candidate
+                                                                </DropdownMenuItem>
+                                                                <DropdownMenuSeparator />
+                                                                <DropdownMenuItem className="text-destructive">Delete Candidate</DropdownMenuItem>
+                                                            </DropdownMenuContent>
+                                                        </DropdownMenu>
+                                                    </TableCell>
+                                                </TableRow>
+                                            );
+                                        })
                                     )}
                                 </TableBody>
                             </Table>
