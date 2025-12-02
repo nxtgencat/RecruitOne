@@ -1,0 +1,119 @@
+'use client'
+
+import { useState, useEffect } from 'react'
+import { useParams } from 'next/navigation'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
+import { JobCandidatesTable } from '@/components/job-candidates-table'
+import { JOBS } from '@/lib/mock-data'
+
+export default function JobDetailPage() {
+    const params = useParams()
+    const id = params.id as string
+
+    const [job, setJob] = useState(JOBS.find(j => j.id === id) || JOBS[0])
+
+    useEffect(() => {
+        const found = JOBS.find(j => j.id === id)
+        if (found) {
+            setJob(found)
+        }
+    }, [id])
+
+    return (
+        <div className="p-8 space-y-8">
+            <div className="flex items-center justify-between">
+                <div>
+                    <h1 className="text-3xl font-bold">{job.title}</h1>
+                    <p className="text-muted-foreground">{job.company}</p>
+                </div>
+                <div className="flex gap-2">
+                    <Button variant="outline">Edit</Button>
+                    <Button variant="destructive">Delete</Button>
+                </div>
+            </div>
+
+            <Tabs defaultValue="details" className="w-full">
+                <TabsList className="w-full justify-start h-auto flex-wrap">
+                    <TabsTrigger value="details">Job Details</TabsTrigger>
+                    <TabsTrigger value="candidates">Candidates</TabsTrigger>
+                    <TabsTrigger value="pipeline">Hiring Pipeline</TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="details" className="mt-6">
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Job Details</CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-6">
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <Label>Title</Label>
+                                    <Input defaultValue={job.title} />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>Company</Label>
+                                    <Input defaultValue={job.company} />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>Status</Label>
+                                    <Input defaultValue={job.status} />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>Owner</Label>
+                                    <Input defaultValue={job.owner} />
+                                </div>
+                            </div>
+
+                            <div className="space-y-2">
+                                <Label>Description</Label>
+                                <Textarea defaultValue={job.jobDescription} className="min-h-[100px]" />
+                            </div>
+
+                            <div className="grid grid-cols-3 gap-4">
+                                <div className="space-y-2">
+                                    <Label>Min Salary</Label>
+                                    <Input defaultValue={job.minSalary} type="number" />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>Max Salary</Label>
+                                    <Input defaultValue={job.maxSalary} type="number" />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>Openings</Label>
+                                    <Input defaultValue={job.openings} type="number" />
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
+                </TabsContent>
+
+                <TabsContent value="candidates" className="mt-6">
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Candidates</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <JobCandidatesTable jobId={id} />
+                        </CardContent>
+                    </Card>
+                </TabsContent>
+
+                <TabsContent value="pipeline" className="mt-6">
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Hiring Pipeline</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <p className="text-muted-foreground">Pipeline visualization.</p>
+                        </CardContent>
+                    </Card>
+                </TabsContent>
+            </Tabs>
+        </div>
+    )
+}
