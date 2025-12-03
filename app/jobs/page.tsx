@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import {
     Table,
@@ -24,19 +24,35 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { MoreHorizontal, ArrowUpDown, Search, Plus, Filter, Download, Trash2 } from 'lucide-react'
-import { JOBS, Job } from '@/lib/mock-data'
 import { CreateJobDialog } from '@/components/create-job-dialog'
 
 export default function JobsPage() {
     const router = useRouter()
-    const [jobs, setJobs] = useState<Job[]>(JOBS)
+    const [jobs, setJobs] = useState<any[]>([])
+    const [isLoading, setIsLoading] = useState(true)
     const [searchQuery, setSearchQuery] = useState('')
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
     const [openDialog, setOpenDialog] = useState(false)
 
+    useEffect(() => {
+        const fetchJobs = async () => {
+            setIsLoading(true)
+            try {
+                const { getJobs } = await import('@/lib/clientDbService')
+                const data = await getJobs()
+                setJobs(data)
+            } catch (error) {
+                console.error("Failed to fetch jobs:", error)
+            } finally {
+                setIsLoading(false)
+            }
+        }
+        fetchJobs()
+    }, [])
+
     const handleSelectAll = (checked: boolean) => {
         if (checked) {
-            setSelectedIds(new Set(jobs.map((j) => j.id)))
+            setSelectedIds(new Set(jobs.map((j) => j.$id)))
         } else {
             setSelectedIds(new Set())
         }
@@ -53,8 +69,8 @@ export default function JobsPage() {
     }
 
     const filteredJobs = jobs.filter((job) =>
-        job.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        job.company.toLowerCase().includes(searchQuery.toLowerCase())
+        (job.title || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (job.company || '').toLowerCase().includes(searchQuery.toLowerCase())
     )
 
     const getStatusColor = (status: string) => {
@@ -128,7 +144,13 @@ export default function JobsPage() {
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {filteredJobs.length === 0 ? (
+                                    {isLoading ? (
+                                        <TableRow>
+                                            <TableCell colSpan={8} className="h-24 text-center">
+                                                Loading jobs...
+                                            </TableCell>
+                                        </TableRow>
+                                    ) : filteredJobs.length === 0 ? (
                                         <TableRow>
                                             <TableCell colSpan={8} className="h-24 text-center">
                                                 No jobs found.
@@ -136,25 +158,25 @@ export default function JobsPage() {
                                         </TableRow>
                                     ) : (
                                         filteredJobs.map((job) => (
-                                            <TableRow key={job.id} className="cursor-pointer hover:bg-muted/50" onClick={() => router.push(`/jobs/${job.id}`)}>
+                                            <TableRow key={job.$id} className="cursor-pointer hover:bg-muted/50" onClick={() => router.push(`/jobs/${job.$id}`)}>
                                                 <TableCell onClick={(e) => e.stopPropagation()}>
                                                     <Checkbox
-                                                        checked={selectedIds.has(job.id)}
-                                                        onCheckedChange={(checked) => handleSelectRow(job.id, checked as boolean)}
+                                                        checked={selectedIds.has(job.$id)}
+                                                        onCheckedChange={(checked) => handleSelectRow(job.$id, checked as boolean)}
                                                     />
                                                 </TableCell>
                                                 <TableCell className="font-medium">{job.title}</TableCell>
-                                                <TableCell>{job.company}</TableCell>
+                                                <TableCell>{job.company || job.company_name || '-'}</TableCell>
                                                 <TableCell>
                                                     <Badge variant="secondary" className={getStatusColor(job.status)}>
                                                         {job.status}
                                                     </Badge>
                                                 </TableCell>
-                                                <TableCell className="max-w-[200px] truncate" title={job.keywords}>
-                                                    {job.keywords}
+                                                <TableCell className="max-w-[200px] truncate" title={Array.isArray(job.skills) ? job.skills.join(', ') : job.skills}>
+                                                    {Array.isArray(job.skills) ? job.skills.join(', ') : job.skills}
                                                 </TableCell>
-                                                <TableCell>{job.city}, {job.state}</TableCell>
-                                                <TableCell>{job.postedDate}</TableCell>
+                                                <TableCell>{job.city ? `${job.city}, ${job.state || ''}` : '-'}</TableCell>
+                                                <TableCell>{new Date(job.$createdAt).toLocaleDateString()}</TableCell>
                                                 <TableCell onClick={(e) => e.stopPropagation()}>
                                                     <DropdownMenu>
                                                         <DropdownMenuTrigger asChild>
@@ -165,7 +187,7 @@ export default function JobsPage() {
                                                         </DropdownMenuTrigger>
                                                         <DropdownMenuContent align="end">
                                                             <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                                                            <DropdownMenuItem onClick={() => router.push(`/jobs/${job.id}`)}>
+                                                            <DropdownMenuItem onClick={() => router.push(`/jobs/${job.$id}`)}>
                                                                 View Details
                                                             </DropdownMenuItem>
                                                             <DropdownMenuSeparator />
@@ -187,7 +209,7 @@ export default function JobsPage() {
                 open={openDialog}
                 onOpenChange={setOpenDialog}
                 onJobCreate={(newJob) => {
-                    setJobs([...jobs, newJob as any as Job])
+                    setJobs([newJob, ...jobs])
                     setOpenDialog(false)
                 }}
             />

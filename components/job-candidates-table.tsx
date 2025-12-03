@@ -62,10 +62,11 @@ export function JobCandidatesTable({ jobId }: JobCandidatesTableProps) {
     }
 
     const filteredCandidates = candidates
-        .filter((candidate) =>
-            candidate.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            candidate.email.toLowerCase().includes(searchQuery.toLowerCase())
-        )
+        .filter((candidate) => {
+            const fullName = candidate.name || `${candidate.firstName || ''} ${candidate.lastName || ''}`.trim()
+            return fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                (candidate.email || '').toLowerCase().includes(searchQuery.toLowerCase())
+        })
         .sort((a, b) => {
             if (!sortConfig) return 0
             const { key, direction } = sortConfig
@@ -180,22 +181,22 @@ export function JobCandidatesTable({ jobId }: JobCandidatesTableProps) {
                             </TableRow>
                         ) : (
                             filteredCandidates.map((candidate) => (
-                                <TableRow key={candidate.id}>
+                                <TableRow key={candidate.$id}>
                                     <TableCell>
                                         <Checkbox
-                                            checked={selectedIds.has(candidate.id)}
-                                            onCheckedChange={(checked) => handleSelectRow(candidate.id, checked as boolean)}
+                                            checked={selectedIds.has(candidate.$id)}
+                                            onCheckedChange={(checked) => handleSelectRow(candidate.$id || '', checked as boolean)}
                                         />
                                     </TableCell>
                                     <TableCell>
-                                        <Link href={`/candidates/${candidate.id}`} className="font-medium hover:underline">
-                                            {candidate.name}
+                                        <Link href={`/candidates/${candidate.$id}`} className="font-medium hover:underline">
+                                            {candidate.firstName} {candidate.lastName}
                                         </Link>
                                         <div className="text-xs text-muted-foreground">{candidate.email}</div>
                                     </TableCell>
                                     <TableCell>
-                                        <Badge variant="secondary" className={getStatusColor(candidate.status || 'Applied')}>
-                                            {candidate.status}
+                                        <Badge variant="secondary" className="bg-blue-100 text-blue-700">
+                                            {candidate.status || 'Applied'}
                                         </Badge>
                                     </TableCell>
                                     <TableCell>

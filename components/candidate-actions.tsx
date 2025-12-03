@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import {
     Dialog,
@@ -13,18 +13,59 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Briefcase, Phone, StickyNote, CheckSquare, Calendar } from 'lucide-react'
+import { Briefcase, Phone, StickyNote, CheckSquare, Calendar, Loader2 } from 'lucide-react'
+import { toast } from 'sonner'
 
-export function CandidateActions() {
+interface CandidateActionsProps {
+    candidateId: string
+}
+
+export function CandidateActions({ candidateId }: CandidateActionsProps) {
     const [activeDialog, setActiveDialog] = useState<string | null>(null)
+    const [jobs, setJobs] = useState<any[]>([])
+    const [isLoadingJobs, setIsLoadingJobs] = useState(false)
+    const [isAssigning, setIsAssigning] = useState(false)
 
     const closeDialog = () => setActiveDialog(null)
 
-    const handleAssignJob = (e: React.FormEvent) => {
+    useEffect(() => {
+        if (activeDialog === 'assign') {
+            const fetchJobs = async () => {
+                setIsLoadingJobs(true)
+                try {
+                    const { getJobs } = await import('@/lib/clientDbService')
+                    const data = await getJobs()
+                    setJobs(data)
+                } catch (error) {
+                    console.error("Failed to fetch jobs:", error)
+                    toast.error("Failed to load jobs")
+                } finally {
+                    setIsLoadingJobs(false)
+                }
+            }
+            fetchJobs()
+        }
+    }, [activeDialog])
+
+    const handleAssignJob = async (e: React.FormEvent) => {
         e.preventDefault()
         const formData = new FormData(e.target as HTMLFormElement)
-        console.log('Assign to Job:', Object.fromEntries(formData))
-        closeDialog()
+        const jobId = formData.get('jobId') as string
+
+        if (!jobId) return
+
+        setIsAssigning(true)
+        try {
+            const { assignCandidateToJob } = await import('@/lib/clientDbService')
+            await assignCandidateToJob(candidateId, jobId)
+            toast.success("Candidate assigned to job successfully")
+            closeDialog()
+        } catch (error) {
+            console.error("Failed to assign candidate:", error)
+            toast.error("Failed to assign candidate")
+        } finally {
+            setIsAssigning(false)
+        }
     }
 
     const handleLogCall = (e: React.FormEvent) => {
@@ -91,17 +132,22 @@ export function CandidateActions() {
                             <Label htmlFor="jobId">Select Job</Label>
                             <Select name="jobId" required>
                                 <SelectTrigger>
-                                    <SelectValue placeholder="Select a job..." />
+                                    <SelectValue placeholder={isLoadingJobs ? "Loading jobs..." : "Select a job..."} />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem value="job-1">Senior React Developer</SelectItem>
-                                    <SelectItem value="job-2">Full Stack Engineer</SelectItem>
-                                    <SelectItem value="job-3">Product Manager</SelectItem>
+                                    {jobs.map((job) => (
+                                        <SelectItem key={job.$id} value={job.$id}>
+                                            {job.title} - {job.company || job.company_name || 'Unknown Company'}
+                                        </SelectItem>
+                                    ))}
                                 </SelectContent>
                             </Select>
                         </div>
                         <DialogFooter>
-                            <Button type="submit">Assign</Button>
+                            <Button type="submit" disabled={isAssigning || isLoadingJobs}>
+                                {isAssigning && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                Assign
+                            </Button>
                         </DialogFooter>
                     </form>
                 </DialogContent>

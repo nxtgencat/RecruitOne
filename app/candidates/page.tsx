@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import {
     Table,
@@ -24,19 +24,35 @@ import { Checkbox } from '@/components/ui/checkbox'
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { MoreHorizontal, ArrowUpDown, Search, Plus, Filter, Download, Trash2, Mail, Phone } from 'lucide-react'
-import { CANDIDATES, Candidate } from '@/lib/mock-data'
 import { CreateCandidateDialog } from '@/components/create-candidate-dialog'
 
 export default function CandidatesPage() {
     const router = useRouter()
-    const [candidates, setCandidates] = useState<Candidate[]>(CANDIDATES)
+    const [candidates, setCandidates] = useState<any[]>([])
+    const [isLoading, setIsLoading] = useState(true)
     const [searchQuery, setSearchQuery] = useState('')
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
     const [openDialog, setOpenDialog] = useState(false)
 
+    useEffect(() => {
+        const fetchCandidates = async () => {
+            setIsLoading(true)
+            try {
+                const { getCandidates } = await import('@/lib/clientDbService')
+                const data = await getCandidates()
+                setCandidates(data)
+            } catch (error) {
+                console.error("Failed to fetch candidates:", error)
+            } finally {
+                setIsLoading(false)
+            }
+        }
+        fetchCandidates()
+    }, [])
+
     const handleSelectAll = (checked: boolean) => {
         if (checked) {
-            setSelectedIds(new Set(candidates.map((c) => c.id || c.$id || '')))
+            setSelectedIds(new Set(candidates.map((c) => c.$id)))
         } else {
             setSelectedIds(new Set())
         }
@@ -58,8 +74,6 @@ export default function CandidatesPage() {
         return fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
             email.toLowerCase().includes(searchQuery.toLowerCase());
     });
-
-
 
     return (
         <div className="p-6 space-y-6">
@@ -135,15 +149,21 @@ export default function CandidatesPage() {
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {filteredCandidates.length === 0 ? (
+                                    {isLoading ? (
                                         <TableRow>
-                                            <TableCell colSpan={7} className="h-24 text-center">
+                                            <TableCell colSpan={9} className="h-24 text-center">
+                                                Loading candidates...
+                                            </TableCell>
+                                        </TableRow>
+                                    ) : filteredCandidates.length === 0 ? (
+                                        <TableRow>
+                                            <TableCell colSpan={9} className="h-24 text-center">
                                                 No candidates found.
                                             </TableCell>
                                         </TableRow>
                                     ) : (
                                         filteredCandidates.map((candidate) => {
-                                            const candidateId = candidate.id || candidate.$id || '';
+                                            const candidateId = candidate.$id;
                                             return (
                                                 <TableRow key={candidateId} className="cursor-pointer hover:bg-muted/50" onClick={() => router.push(`/candidates/${candidateId}`)}>
                                                     <TableCell onClick={(e) => e.stopPropagation()}>
@@ -153,13 +173,13 @@ export default function CandidatesPage() {
                                                         />
                                                     </TableCell>
                                                     <TableCell className="font-medium">
-                                                        {candidate.name || `${candidate.firstName || ''} ${candidate.lastName || ''}`}
+                                                        {candidate.firstName} {candidate.lastName}
                                                     </TableCell>
                                                     <TableCell>{candidate.email}</TableCell>
-                                                    <TableCell>{candidate.phone}</TableCell>
-                                                    <TableCell>{candidate.city}, {candidate.state}</TableCell>
-                                                    <TableCell className="max-w-[200px] truncate" title={candidate.workHistory || `${candidate.title || ''} at ${candidate.current_organization || ''}`}>
-                                                        {candidate.workHistory || (candidate.title ? `${candidate.title}${candidate.current_organization ? ` at ${candidate.current_organization}` : ''}` : '-')}
+                                                    <TableCell>{candidate.phone || '-'}</TableCell>
+                                                    <TableCell>{candidate.city ? `${candidate.city}, ${candidate.state || ''}` : '-'}</TableCell>
+                                                    <TableCell className="max-w-[200px] truncate" title={candidate.title || ''}>
+                                                        {candidate.title || (candidate.current_organization ? `${candidate.current_organization}` : '-')}
                                                     </TableCell>
                                                     <TableCell>
                                                         {candidate.callLog && candidate.callLog.length > 0 ? (
@@ -187,7 +207,7 @@ export default function CandidatesPage() {
                                                             </DropdownMenuTrigger>
                                                             <DropdownMenuContent align="end">
                                                                 <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                                                                <DropdownMenuItem onClick={() => router.push(`/candidates/${candidate.id}`)}>
+                                                                <DropdownMenuItem onClick={() => router.push(`/candidates/${candidateId}`)}>
                                                                     View Profile
                                                                 </DropdownMenuItem>
                                                                 <DropdownMenuItem>
@@ -214,7 +234,7 @@ export default function CandidatesPage() {
                 open={openDialog}
                 onOpenChange={setOpenDialog}
                 onCandidateCreate={(newCandidate) => {
-                    setCandidates([...candidates, newCandidate])
+                    setCandidates([newCandidate, ...candidates])
                     setOpenDialog(false)
                 }}
             />

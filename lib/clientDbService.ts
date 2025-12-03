@@ -543,3 +543,202 @@ export const createJob = async (jobData: any) => {
         throw error;
     }
 };
+
+export const getCandidates = async () => {
+    try {
+        await ensureAuthenticated();
+        const result = await tablesDB.listRows({
+            databaseId: DB_ID,
+            tableId: 'candidates',
+            queries: [
+                Query.orderDesc('$createdAt')
+            ]
+        });
+        return result.rows;
+    } catch (error) {
+        console.error("Error fetching candidates:", error);
+        return [];
+    }
+};
+
+export const getJobs = async () => {
+    try {
+        await ensureAuthenticated();
+        const result = await tablesDB.listRows({
+            databaseId: DB_ID,
+            tableId: 'jobs',
+            queries: [
+                Query.orderDesc('$createdAt')
+            ]
+        });
+        return result.rows;
+    } catch (error) {
+        console.error("Error fetching jobs:", error);
+        return [];
+    }
+};
+
+export const getCompanies = async () => {
+    try {
+        await ensureAuthenticated();
+        const result = await tablesDB.listRows({
+            databaseId: DB_ID,
+            tableId: 'companies',
+            queries: [
+                Query.orderDesc('$createdAt')
+            ]
+        });
+        return result.rows;
+    } catch (error) {
+        console.error("Error fetching companies:", error);
+        return [];
+    }
+};
+
+export const getCandidate = async (id: string) => {
+    try {
+        await ensureAuthenticated();
+        const result = await tablesDB.getRow({
+            databaseId: DB_ID,
+            tableId: 'candidates',
+            rowId: id
+        });
+        return result;
+    } catch (error) {
+        console.error(`Error fetching candidate ${id}:`, error);
+        return null;
+    }
+};
+
+export const getJob = async (id: string) => {
+    try {
+        await ensureAuthenticated();
+        const result = await tablesDB.getRow({
+            databaseId: DB_ID,
+            tableId: 'jobs',
+            rowId: id
+        });
+        return result;
+    } catch (error) {
+        console.error(`Error fetching job ${id}:`, error);
+        return null;
+    }
+};
+
+export const getJobCandidates = async (jobId: string) => {
+    try {
+        await ensureAuthenticated();
+        // Fetch applications for this job
+        const applications = await tablesDB.listRows({
+            databaseId: DB_ID,
+            tableId: 'applications',
+            queries: [
+                Query.equal('job_id', jobId)
+            ]
+        });
+
+        if (applications.rows.length === 0) {
+            return [];
+        }
+
+        // Fetch candidate details for each application
+        const candidatePromises = applications.rows.map(async (app: any) => {
+            try {
+                const candidate = await tablesDB.getRow({
+                    databaseId: DB_ID,
+                    tableId: 'candidates',
+                    rowId: app.candidate_id
+                });
+                // Merge application data with candidate data
+                return {
+                    ...candidate,
+                    application: app,
+                    status: app.status || 'Applied', // Use application status if available
+                    matchScore: candidate.matchScore || 0 // Preserve match score if it exists
+                };
+            } catch (e) {
+                console.error(`Failed to fetch candidate ${app.candidate_id}`, e);
+                return null;
+            }
+        });
+
+        const candidates = await Promise.all(candidatePromises);
+        return candidates.filter(c => c !== null);
+    } catch (error) {
+        console.error(`Error fetching candidates for job ${jobId}:`, error);
+        return [];
+    }
+};
+
+export const assignCandidateToJob = async (candidateId: string, jobId: string) => {
+    try {
+        await ensureAuthenticated();
+
+        // 1. Get the job to find the pipeline_id
+        const job = await tablesDB.getRow({
+            databaseId: DB_ID,
+            tableId: 'jobs',
+            rowId: jobId
+        });
+
+        if (!job) throw new Error("Job not found");
+
+        let pipelineId = job.pipeline_id;
+
+        // Fallback: If no pipeline assigned, get the first available pipeline
+        if (!pipelineId) {
+            console.warn(`Job ${jobId} has no pipeline_id. Fetching default pipeline.`);
+            const pipelines = await tablesDB.listRows({
+                databaseId: DB_ID,
+                tableId: 'pipelines',
+                queries: [
+                    Query.limit(1)
+                ]
+            });
+
+            if (pipelines.rows.length > 0) {
+                pipelineId = pipelines.rows[0].$id;
+                // Optionally update the job with this pipeline
+                // await tablesDB.updateRow({ ... })
+            } else {
+                throw new Error("No pipelines found in the system");
+            }
+        }
+
+        // 2. Get the first stage of the pipeline
+        const stages = await tablesDB.listRows({
+            databaseId: DB_ID,
+            tableId: 'pipeline_stages',
+            queries: [
+                Query.equal('pipeline_id', pipelineId),
+                Query.orderAsc('order'),
+                Query.limit(1)
+            ]
+        });
+
+        if (stages.rows.length === 0) throw new Error("Pipeline has no stages");
+        const firstStageId = stages.rows[0].$id;
+
+        // 3. Create the application record
+        const application = await tablesDB.createRow({
+            databaseId: DB_ID,
+            tableId: 'applications',
+            rowId: ID.unique(),
+            data: {
+                candidate_id: candidateId,
+                job_id: jobId,
+                pipeline_id: pipelineId,
+                current_stage_id: firstStageId,
+                assigned_at: new Date().toISOString(),
+                // assigned_by: 'current_user_id' // TODO: Get current user ID
+            }
+        });
+
+        return application;
+    } catch (error) {
+        console.error("Error assigning candidate to job:", error);
+        throw error;
+    }
+};
+
+

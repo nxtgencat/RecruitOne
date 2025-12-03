@@ -10,18 +10,29 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { CANDIDATES } from '@/lib/mock-data'
 
 export default function CandidateDetailPage() {
     const params = useParams()
     const id = params.id as string
 
-    const [candidate, setCandidate] = useState(CANDIDATES.find(c => c.id === id) || CANDIDATES[0])
+    const [candidate, setCandidate] = useState<any>(null)
+    const [isLoading, setIsLoading] = useState(true)
 
     useEffect(() => {
-        const found = CANDIDATES.find(c => c.id === id)
-        if (found) {
-            setCandidate(found)
+        const fetchCandidate = async () => {
+            setIsLoading(true)
+            try {
+                const { getCandidate } = await import('@/lib/clientDbService')
+                const data = await getCandidate(id)
+                setCandidate(data)
+            } catch (error) {
+                console.error("Failed to fetch candidate:", error)
+            } finally {
+                setIsLoading(false)
+            }
+        }
+        if (id) {
+            fetchCandidate()
         }
     }, [id])
 
@@ -45,12 +56,20 @@ export default function CandidateDetailPage() {
         }
     }
 
+    if (isLoading) {
+        return <div className="p-8">Loading candidate details...</div>
+    }
+
+    if (!candidate) {
+        return <div className="p-8">Candidate not found.</div>
+    }
+
     return (
         <div className="p-8 space-y-8">
             <div className="flex flex-col gap-4">
                 <div className="flex items-center justify-between">
                     <div>
-                        <h1 className="text-3xl font-bold">{candidate.name}</h1>
+                        <h1 className="text-3xl font-bold">{candidate.firstName} {candidate.lastName}</h1>
                         <p className="text-muted-foreground">{candidate.email}</p>
                     </div>
                     <div className="flex gap-2">
@@ -59,10 +78,11 @@ export default function CandidateDetailPage() {
                     </div>
                 </div>
 
-                <CandidateActions />
+                <CandidateActions candidateId={id} />
             </div>
 
             <Tabs defaultValue="all-details" className="w-full">
+
                 <TabsList className="w-full justify-start h-auto flex-wrap">
                     <TabsTrigger value="activities">Activities</TabsTrigger>
                     <TabsTrigger value="all-details">All Details</TabsTrigger>
@@ -95,7 +115,7 @@ export default function CandidateDetailPage() {
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-2">
                                     <Label>Name</Label>
-                                    <Input defaultValue={candidate.name} />
+                                    <Input defaultValue={`${candidate.firstName} ${candidate.lastName}`} />
                                 </div>
                                 <div className="space-y-2">
                                     <Label>Email</Label>
@@ -103,39 +123,39 @@ export default function CandidateDetailPage() {
                                 </div>
                                 <div className="space-y-2">
                                     <Label>Phone</Label>
-                                    <Input defaultValue={candidate.phone} />
+                                    <Input defaultValue={candidate.phone || ''} />
                                 </div>
                                 <div className="space-y-2">
                                     <Label>Gender</Label>
-                                    <Input defaultValue={candidate.gender} />
+                                    <Input defaultValue={candidate.gender || ''} />
                                 </div>
                                 <div className="space-y-2">
                                     <Label>Skills</Label>
-                                    <Input defaultValue={candidate.skills} />
+                                    <Input defaultValue={Array.isArray(candidate.skills) ? candidate.skills.join(', ') : candidate.skills} />
                                 </div>
                                 <div className="space-y-2">
                                     <Label>Owner</Label>
-                                    <Input defaultValue={candidate.owner} />
+                                    <Input defaultValue={candidate.owner_id || ''} />
                                 </div>
                             </div>
 
                             <div className="space-y-2">
                                 <Label>Full Address</Label>
-                                <Textarea defaultValue={candidate.fullAddress} />
+                                <Textarea defaultValue={candidate.address || ''} />
                             </div>
 
                             <div className="grid grid-cols-3 gap-4">
                                 <div className="space-y-2">
                                     <Label>City</Label>
-                                    <Input defaultValue={candidate.city} />
+                                    <Input defaultValue={candidate.city || ''} />
                                 </div>
                                 <div className="space-y-2">
                                     <Label>State</Label>
-                                    <Input defaultValue={candidate.state} />
+                                    <Input defaultValue={candidate.state || ''} />
                                 </div>
                                 <div className="space-y-2">
                                     <Label>Country</Label>
-                                    <Input defaultValue={candidate.country} />
+                                    <Input defaultValue={candidate.country || ''} />
                                 </div>
                             </div>
                         </CardContent>

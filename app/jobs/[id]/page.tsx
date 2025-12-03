@@ -15,21 +15,41 @@ export default function JobDetailPage() {
     const params = useParams()
     const id = params.id as string
 
-    const [job, setJob] = useState(JOBS.find(j => j.id === id) || JOBS[0])
+    const [job, setJob] = useState<any>(null)
+    const [isLoading, setIsLoading] = useState(true)
 
     useEffect(() => {
-        const found = JOBS.find(j => j.id === id)
-        if (found) {
-            setJob(found)
+        const fetchJob = async () => {
+            setIsLoading(true)
+            try {
+                const { getJob } = await import('@/lib/clientDbService')
+                const data = await getJob(id)
+                setJob(data)
+            } catch (error) {
+                console.error("Failed to fetch job:", error)
+            } finally {
+                setIsLoading(false)
+            }
+        }
+        if (id) {
+            fetchJob()
         }
     }, [id])
+
+    if (isLoading) {
+        return <div className="p-8">Loading job details...</div>
+    }
+
+    if (!job) {
+        return <div className="p-8">Job not found.</div>
+    }
 
     return (
         <div className="p-8 space-y-8">
             <div className="flex items-center justify-between">
                 <div>
                     <h1 className="text-3xl font-bold">{job.title}</h1>
-                    <p className="text-muted-foreground">{job.company}</p>
+                    <p className="text-muted-foreground">{job.company || job.company_name}</p>
                 </div>
                 <div className="flex gap-2">
                     <Button variant="outline">Edit</Button>
@@ -57,7 +77,7 @@ export default function JobDetailPage() {
                                 </div>
                                 <div className="space-y-2">
                                     <Label>Company</Label>
-                                    <Input defaultValue={job.company} />
+                                    <Input defaultValue={job.company || job.company_name} />
                                 </div>
                                 <div className="space-y-2">
                                     <Label>Status</Label>
@@ -65,23 +85,23 @@ export default function JobDetailPage() {
                                 </div>
                                 <div className="space-y-2">
                                     <Label>Owner</Label>
-                                    <Input defaultValue={job.owner} />
+                                    <Input defaultValue={job.owner_id} />
                                 </div>
                             </div>
 
                             <div className="space-y-2">
                                 <Label>Description</Label>
-                                <Textarea defaultValue={job.jobDescription} className="min-h-[100px]" />
+                                <Textarea defaultValue={job.description || job.jobDescription} className="min-h-[100px]" />
                             </div>
 
                             <div className="grid grid-cols-3 gap-4">
                                 <div className="space-y-2">
                                     <Label>Min Salary</Label>
-                                    <Input defaultValue={job.minSalary} type="number" />
+                                    <Input defaultValue={job.min_salary || job.minSalary} type="number" />
                                 </div>
                                 <div className="space-y-2">
                                     <Label>Max Salary</Label>
-                                    <Input defaultValue={job.maxSalary} type="number" />
+                                    <Input defaultValue={job.max_salary || job.maxSalary} type="number" />
                                 </div>
                                 <div className="space-y-2">
                                     <Label>Openings</Label>
