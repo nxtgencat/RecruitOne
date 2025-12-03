@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { createJob, generateJobDescription } from '@/lib/clientDbService'
+import { useState, useEffect } from 'react'
+import { createJob, generateJobDescription, getCompanies } from '@/lib/clientDbService'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import {
@@ -32,11 +32,13 @@ export function CreateJobDialog({
   const [isGenerating, setIsGenerating] = useState(false)
   const [isCreating, setIsCreating] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [companies, setCompanies] = useState<any[]>([])
 
   const [formData, setFormData] = useState({
     title: '',
     status: 'Open',
-    company: '',
+    company_id: '',
+    company_name: '', // For display/search if needed
     noteForCandidates: '',
     fullAddress: '',
     city: '',
@@ -66,6 +68,21 @@ export function CreateJobDialog({
     keywords: '',
   })
 
+  useEffect(() => {
+    if (open) {
+      fetchCompanies()
+    }
+  }, [open])
+
+  const fetchCompanies = async () => {
+    try {
+      const data = await getCompanies()
+      setCompanies(data)
+    } catch (error) {
+      console.error('Failed to fetch companies:', error)
+    }
+  }
+
   const handleGenerateDescription = async () => {
     if (!formData.title || !formData.keywords) {
       setError('Please enter a Job Title and Skills/Keywords to generate a description.')
@@ -75,7 +92,12 @@ export function CreateJobDialog({
     setIsGenerating(true)
     setError(null)
     try {
-      const description = await generateJobDescription(formData);
+      // Pass company name for better JD generation
+      const jdData = {
+        ...formData,
+        company: formData.company_name
+      }
+      const description = await generateJobDescription(jdData);
       setFormData(prev => ({ ...prev, jobDescription: description }))
     } catch (error) {
       console.error('Error generating JD:', error)
@@ -87,6 +109,11 @@ export function CreateJobDialog({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+
+    if (!formData.company_id) {
+      setError('Please select a company.')
+      return
+    }
 
     setIsCreating(true)
     setError(null)
@@ -110,7 +137,8 @@ export function CreateJobDialog({
     setFormData({
       title: '',
       status: 'Open',
-      company: '',
+      company_id: '',
+      company_name: '',
       noteForCandidates: '',
       fullAddress: '',
       city: '',
@@ -166,13 +194,29 @@ export function CreateJobDialog({
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="company">Company Name *</Label>
-              <Input
-                id="company"
-                value={formData.company}
-                onChange={(e) => setFormData({ ...formData, company: e.target.value })}
-                required
-              />
+              <Label htmlFor="company">Company *</Label>
+              <Select
+                value={formData.company_id}
+                onValueChange={(value) => {
+                  const selectedCompany = companies.find(c => c.$id === value)
+                  setFormData({
+                    ...formData,
+                    company_id: value,
+                    company_name: selectedCompany ? selectedCompany.name : ''
+                  })
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select Company" />
+                </SelectTrigger>
+                <SelectContent>
+                  {companies.map((company) => (
+                    <SelectItem key={company.$id} value={company.$id}>
+                      {company.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
 

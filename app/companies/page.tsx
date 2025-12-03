@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import {
     Table,
@@ -23,20 +23,37 @@ import {
 import { Checkbox } from '@/components/ui/checkbox'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { MoreHorizontal, ArrowUpDown, Search, Plus, Filter, Download, Trash2, Globe } from 'lucide-react'
-import { COMPANIES, Company } from '@/lib/mock-data'
+import { MoreHorizontal, Search, Plus, Filter, Download, Globe, Loader2 } from 'lucide-react'
+import { getCompanies } from '@/lib/clientDbService'
 import { CreateCompanyDialog } from '@/components/create-company-dialog'
 
 export default function CompaniesPage() {
     const router = useRouter()
-    const [companies, setCompanies] = useState<Company[]>(COMPANIES)
+    const [companies, setCompanies] = useState<any[]>([])
+    const [isLoading, setIsLoading] = useState(true)
     const [searchQuery, setSearchQuery] = useState('')
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
     const [openDialog, setOpenDialog] = useState(false)
 
+    useEffect(() => {
+        fetchCompanies()
+    }, [])
+
+    const fetchCompanies = async () => {
+        setIsLoading(true)
+        try {
+            const data = await getCompanies()
+            setCompanies(data)
+        } catch (error) {
+            console.error('Failed to fetch companies:', error)
+        } finally {
+            setIsLoading(false)
+        }
+    }
+
     const handleSelectAll = (checked: boolean) => {
         if (checked) {
-            setSelectedIds(new Set(companies.map((c) => c.id)))
+            setSelectedIds(new Set(companies.map((c) => c.$id)))
         } else {
             setSelectedIds(new Set())
         }
@@ -54,7 +71,7 @@ export default function CompaniesPage() {
 
     const filteredCompanies = companies.filter((company) =>
         company.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        company.industry.toLowerCase().includes(searchQuery.toLowerCase())
+        (company.industry && company.industry.toLowerCase().includes(searchQuery.toLowerCase()))
     )
 
     return (
@@ -111,40 +128,42 @@ export default function CompaniesPage() {
                                         <TableHead>Name</TableHead>
                                         <TableHead>Industry</TableHead>
                                         <TableHead>Location</TableHead>
-                                        <TableHead>Open Jobs</TableHead>
                                         <TableHead>Website</TableHead>
                                         <TableHead className="w-[50px]"></TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {filteredCompanies.length === 0 ? (
+                                    {isLoading ? (
                                         <TableRow>
-                                            <TableCell colSpan={7} className="h-24 text-center">
+                                            <TableCell colSpan={6} className="h-24 text-center">
+                                                <Loader2 className="h-6 w-6 animate-spin mx-auto" />
+                                            </TableCell>
+                                        </TableRow>
+                                    ) : filteredCompanies.length === 0 ? (
+                                        <TableRow>
+                                            <TableCell colSpan={6} className="h-24 text-center">
                                                 No companies found.
                                             </TableCell>
                                         </TableRow>
                                     ) : (
                                         filteredCompanies.map((company) => (
-                                            <TableRow key={company.id} className="cursor-pointer hover:bg-muted/50" onClick={() => router.push(`/companies/${company.id}`)}>
+                                            <TableRow key={company.$id} className="cursor-pointer hover:bg-muted/50" onClick={() => router.push(`/companies/${company.$id}`)}>
                                                 <TableCell onClick={(e) => e.stopPropagation()}>
                                                     <Checkbox
-                                                        checked={selectedIds.has(company.id)}
-                                                        onCheckedChange={(checked) => handleSelectRow(company.id, checked as boolean)}
+                                                        checked={selectedIds.has(company.$id)}
+                                                        onCheckedChange={(checked) => handleSelectRow(company.$id, checked as boolean)}
                                                     />
                                                 </TableCell>
                                                 <TableCell className="font-medium">{company.name}</TableCell>
-                                                <TableCell>{company.industry}</TableCell>
-                                                <TableCell>{company.fullAddress}</TableCell>
+                                                <TableCell>{company.industry || '-'}</TableCell>
+                                                <TableCell>{company.address || company.city || '-'}</TableCell>
                                                 <TableCell>
-                                                    <Badge variant="secondary">
-                                                        {company.openJobs} Open
-                                                    </Badge>
-                                                </TableCell>
-                                                <TableCell>
-                                                    <a href={company.website} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-                                                        <Globe className="h-3 w-3" />
-                                                        Visit
-                                                    </a>
+                                                    {company.website ? (
+                                                        <a href={company.website} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                                                            <Globe className="h-3 w-3" />
+                                                            Visit
+                                                        </a>
+                                                    ) : '-'}
                                                 </TableCell>
                                                 <TableCell onClick={(e) => e.stopPropagation()}>
                                                     <DropdownMenu>
@@ -156,7 +175,7 @@ export default function CompaniesPage() {
                                                         </DropdownMenuTrigger>
                                                         <DropdownMenuContent align="end">
                                                             <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                                                            <DropdownMenuItem onClick={() => router.push(`/companies/${company.id}`)}>
+                                                            <DropdownMenuItem onClick={() => router.push(`/companies/${company.$id}`)}>
                                                                 View Details
                                                             </DropdownMenuItem>
                                                             <DropdownMenuSeparator />
@@ -178,7 +197,7 @@ export default function CompaniesPage() {
                 open={openDialog}
                 onOpenChange={setOpenDialog}
                 onCompanyCreate={(newCompany) => {
-                    setCompanies([...companies, newCompany])
+                    setCompanies([newCompany, ...companies])
                     setOpenDialog(false)
                 }}
             />

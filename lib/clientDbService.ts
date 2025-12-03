@@ -597,6 +597,39 @@ export const getCompanies = async () => {
     }
 };
 
+export const createCompany = async (companyData: any) => {
+    try {
+        await ensureAuthenticated();
+
+        const companyId = ID.unique();
+
+        const companyRecord = {
+            name: companyData.name,
+            industry: companyData.industry || null,
+            website: companyData.website || null,
+            address: companyData.fullAddress || companyData.address || null,
+            city: companyData.city || null,
+            state: companyData.state || null,
+            country: companyData.country || null,
+            owner_id: companyData.owner || companyData.owner_id || null,
+            hotlist: companyData.hotlist || false
+        };
+
+        const record = await tablesDB.createRow({
+            databaseId: DB_ID,
+            tableId: 'companies',
+            rowId: companyId,
+            data: companyRecord,
+            permissions: [Permission.read(Role.any()), Permission.write(Role.any())]
+        });
+
+        return record;
+    } catch (error) {
+        console.error("Error creating company:", error);
+        throw error;
+    }
+};
+
 export const getCandidate = async (id: string) => {
     try {
         await ensureAuthenticated();
