@@ -630,6 +630,21 @@ export const createCompany = async (companyData: any) => {
     }
 };
 
+export const getCompany = async (id: string) => {
+    try {
+        await ensureAuthenticated();
+        const result = await tablesDB.getRow({
+            databaseId: DB_ID,
+            tableId: 'companies',
+            rowId: id
+        });
+        return result;
+    } catch (error) {
+        console.error(`Error fetching company ${id}:`, error);
+        return null;
+    }
+};
+
 export const getCandidate = async (id: string) => {
     try {
         await ensureAuthenticated();

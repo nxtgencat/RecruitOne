@@ -40,6 +40,7 @@
     "@radix-ui/react-toggle": "latest",
     "@radix-ui/react-toggle-group": "latest",
     "@radix-ui/react-tooltip": "latest",
+    "@vapi-ai/server-sdk": "^0.11.0",
     "@vercel/analytics": "latest",
     "ai": "latest",
     "appwrite": "^21.4.0",

@@ -23,6 +23,7 @@ import {
 import { Checkbox } from '@/components/ui/checkbox'
 import { Badge } from '@/components/ui/badge'
 import { MoreHorizontal, ArrowUpDown, Search, Mail, XCircle, Phone, Loader2 } from 'lucide-react'
+import { toast } from 'sonner'
 
 interface JobCandidatesTableProps {
     jobId: string
@@ -34,6 +35,7 @@ export function JobCandidatesTable({ jobId }: JobCandidatesTableProps) {
     const [searchQuery, setSearchQuery] = useState('')
     const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null)
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+    const [isCalling, setIsCalling] = useState(false)
 
     useEffect(() => {
         const fetchCandidates = async () => {
@@ -77,6 +79,41 @@ export function JobCandidatesTable({ jobId }: JobCandidatesTableProps) {
             newSelected.delete(id)
         }
         setSelectedIds(newSelected)
+    }
+
+    const handleCallCandidate = async (candidate: any) => {
+        if (!candidate.phone) {
+            toast.error('Candidate does not have a phone number.')
+            return
+        }
+
+        setIsCalling(true)
+        toast.info(`Initiating call to ${candidate.firstName}...`)
+
+        try {
+            const response = await fetch('/api/vapi/call', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    customerNumber: candidate.phone,
+                }),
+            })
+
+            const data = await response.json()
+
+            if (!response.ok) {
+                throw new Error(data.error || 'Failed to initiate call')
+            }
+
+            toast.success('Call initiated successfully!')
+        } catch (error: any) {
+            console.error('Error calling candidate:', error)
+            toast.error(error.message || 'Failed to initiate call')
+        } finally {
+            setIsCalling(false)
+        }
     }
 
     const filteredCandidates = candidates
@@ -250,7 +287,7 @@ export function JobCandidatesTable({ jobId }: JobCandidatesTableProps) {
                                             <DropdownMenuContent align="end">
                                                 <DropdownMenuLabel>Actions</DropdownMenuLabel>
                                                 <DropdownMenuItem>View Profile</DropdownMenuItem>
-                                                <DropdownMenuItem>
+                                                <DropdownMenuItem onClick={() => handleCallCandidate(candidate)}>
                                                     <Phone className="mr-2 h-4 w-4" />
                                                     Call Candidate
                                                 </DropdownMenuItem>
