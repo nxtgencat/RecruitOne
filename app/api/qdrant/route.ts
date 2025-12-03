@@ -9,42 +9,59 @@ const qdrantClient = new QdrantClient({
 
 export async function POST(request: NextRequest) {
     try {
-        const { collectionName, id, vector, payload } = await request.json();
+        const body = await request.json();
+        const { action, collectionName, id, vector, payload, vectorName, filter } = body;
 
-        console.log('Qdrant API route called with:', { collectionName, id, vectorLength: vector?.length, payload });
+        console.log('Qdrant API route called with:', { action, collectionName });
 
-        if (!collectionName || !id || !vector) {
-            return NextResponse.json(
-                { error: 'Missing required fields: collectionName, id, vector' },
-                { status: 400 }
-            );
+        if (action === 'search') {
+            if (!collectionName || !vector) {
+                return NextResponse.json(
+                    { error: 'Missing required fields for search: collectionName, vector' },
+                    { status: 400 }
+                );
+            }
+
+            console.log(`Searching in ${collectionName}...`);
+            const searchResult = await qdrantClient.search(collectionName, {
+                vector: vector,
+                limit: body.limit || 10,
+                filter: filter,
+                with_payload: true,
+                with_vector: false
+            });
+
+            return NextResponse.json({ success: true, result: searchResult });
+        } else {
+            // Default to upsert
+            if (!collectionName || !id || !vector) {
+                return NextResponse.json(
+                    { error: 'Missing required fields: collectionName, id, vector' },
+                    { status: 400 }
+                );
+            }
+
+            // Upload to Qdrant
+            console.log('Attempting to upsert to Qdrant...');
+            const result = await qdrantClient.upsert(collectionName, {
+                points: [
+                    {
+                        id: id,
+                        vector: vector,
+                        payload: payload || {}
+                    }
+                ]
+            });
+
+            console.log('Qdrant upsert successful:', result);
+            return NextResponse.json({ success: true, result });
         }
-
-        // Upload to Qdrant
-        console.log('Attempting to upsert to Qdrant...');
-        const result = await qdrantClient.upsert(collectionName, {
-            points: [
-                {
-                    id: id,
-                    vector: vector,
-                    payload: payload || {}
-                }
-            ]
-        });
-        
-        console.log('Qdrant upsert successful:', result);
-
-        return NextResponse.json({ success: true, result });
     } catch (error: any) {
-        console.error('Error uploading to Qdrant - Full error:', error);
-        console.error('Error message:', error.message);
-        console.error('Error status:', error.status);
-        console.error('Error data:', JSON.stringify(error.data, null, 2));
-        console.error('Error stack:', error.stack);
-        
+        console.error('Error in Qdrant API - Full error:', error);
+
         return NextResponse.json(
-            { 
-                error: error.message || 'Failed to upload to Qdrant',
+            {
+                error: error.message || 'Failed to process Qdrant request',
                 details: error.data || null,
                 status: error.status
             },

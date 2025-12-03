@@ -391,7 +391,30 @@ export const createCandidate = async (candidateData: any, resumeFile?: File) => 
             throw new Error("No candidate data provided and no resume to parse.");
         }
 
-        // 2. Create Candidate Record - Map to schema fields
+        // 2. Generate Embedding & ID
+        // Construct rich text for embedding
+        const workHistoryText = finalCandidateData.workHistory?.map((w: any) =>
+            `${w.jobTitle} at ${w.company} (${w.startDate} - ${w.endDate}): ${w.description}`
+        ).join('. ') || '';
+
+        const educationText = finalCandidateData.education?.map((e: any) =>
+            `${e.degree || e.educationalQualification} from ${e.institution}`
+        ).join('. ') || '';
+
+        const textToEmbed = [
+            finalCandidateData.firstName,
+            finalCandidateData.lastName,
+            finalCandidateData.summary,
+            `Skills: ${finalCandidateData.skills?.join(', ')}`,
+            `Experience: ${workHistoryText}`,
+            `Education: ${educationText}`,
+            `Current Role: ${finalCandidateData.employmentInfo?.currentTitle} at ${finalCandidateData.employmentInfo?.currentOrganization}`
+        ].filter(Boolean).join('. ');
+
+        const embedding = await generateEmbedding(textToEmbed);
+        const qdrantId = crypto.randomUUID();
+
+        // 3. Create Candidate Record - Map to schema fields
         const candidateId = ID.unique();
 
         // Map form data to schema fields
@@ -427,7 +450,7 @@ export const createCandidate = async (candidateData: any, resumeFile?: File) => 
             hotlist: finalCandidateData.hotlist || false,
             opt_out: finalCandidateData.opt_out || false,
             owner_id: finalCandidateData.owner_id || finalCandidateData.ownerId || null,
-            embedding_id: null,
+            embedding_id: qdrantId,
             gender: finalCandidateData.gender || null,
             employment_status: finalCandidateData.employmentInfo?.currentEmploymentStatus || finalCandidateData.employment_status || null
         };
@@ -440,29 +463,7 @@ export const createCandidate = async (candidateData: any, resumeFile?: File) => 
             permissions: [Permission.read(Role.any()), Permission.write(Role.any())]
         });
 
-        // 3. Generate & Upload Embedding
-        // Construct rich text for embedding
-        const workHistoryText = finalCandidateData.workHistory?.map((w: any) =>
-            `${w.jobTitle} at ${w.company} (${w.startDate} - ${w.endDate}): ${w.description}`
-        ).join('. ') || '';
-
-        const educationText = finalCandidateData.education?.map((e: any) =>
-            `${e.degree || e.educationalQualification} from ${e.institution}`
-        ).join('. ') || '';
-
-        const textToEmbed = [
-            finalCandidateData.firstName,
-            finalCandidateData.lastName,
-            finalCandidateData.summary,
-            `Skills: ${finalCandidateData.skills?.join(', ')}`,
-            `Experience: ${workHistoryText}`,
-            `Education: ${educationText}`,
-            `Current Role: ${finalCandidateData.employmentInfo?.currentTitle} at ${finalCandidateData.employmentInfo?.currentOrganization}`
-        ].filter(Boolean).join('. ');
-
-        const embedding = await generateEmbedding(textToEmbed);
-        const qdrantId = crypto.randomUUID();
-
+        // 4. Upload to Qdrant
         await uploadToQdrant('candidate_embeddings', qdrantId, embedding, {
             candidate_id: candidateId,
             name: `${finalCandidateData.firstName} ${finalCandidateData.lastName}`,
@@ -482,6 +483,20 @@ export const createJob = async (jobData: any) => {
         await ensureAuthenticated();
 
         const jobId = ID.unique();
+
+        // 1. Generate Embedding & ID
+        // Construct a rich text representation for embedding to improve search relevance
+        const textToEmbed = [
+            jobData.title,
+            jobData.description,
+            jobData.skills?.join(', '),
+            `Company: ${jobData.company || jobData.company_name}`,
+            `Experience: ${jobData.minExperience || jobData.min_experience} - ${jobData.maxExperience || jobData.max_experience} years`,
+            `Salary: ${jobData.minSalary || jobData.min_salary} - ${jobData.maxSalary || jobData.max_salary} ${jobData.currency || jobData.currencyType}`
+        ].filter(Boolean).join('. ');
+
+        const embedding = await generateEmbedding(textToEmbed);
+        const qdrantId = crypto.randomUUID();
 
         // Map form data to schema fields
         const jobRecord = {
@@ -504,10 +519,10 @@ export const createJob = async (jobData: any) => {
             skills: jobData.keywords ? jobData.keywords.split(',').map((s: string) => s.trim()) : (jobData.skills || []),
             owner_id: jobData.owner_id || jobData.ownerId || null,
             pipeline_id: jobData.pipeline_id || jobData.pipelineId || jobData.hiringPipeline || null,
-            embedding_id: null, // Will be set after creating embedding
+            embedding_id: qdrantId,
         };
 
-        // 1. Create Job Record
+        // 2. Create Job Record
         const record = await tablesDB.createRow({
             databaseId: DB_ID,
             tableId: 'jobs',
@@ -516,20 +531,7 @@ export const createJob = async (jobData: any) => {
             permissions: [Permission.read(Role.any()), Permission.write(Role.any())]
         });
 
-        // 2. Generate & Upload Embedding
-        // Construct a rich text representation for embedding to improve search relevance
-        const textToEmbed = [
-            jobData.title,
-            jobData.description,
-            jobData.skills?.join(', '),
-            `Company: ${jobData.company || jobData.company_name}`,
-            `Experience: ${jobData.minExperience || jobData.min_experience} - ${jobData.maxExperience || jobData.max_experience} years`,
-            `Salary: ${jobData.minSalary || jobData.min_salary} - ${jobData.maxSalary || jobData.max_salary} ${jobData.currency || jobData.currencyType}`
-        ].filter(Boolean).join('. ');
-
-        const embedding = await generateEmbedding(textToEmbed);
-        const qdrantId = crypto.randomUUID();
-
+        // 3. Upload to Qdrant
         await uploadToQdrant('job_embeddings', qdrantId, embedding, {
             job_id: jobId,
             title: jobData.title,
@@ -641,6 +643,77 @@ export const getJobCandidates = async (jobId: string) => {
             return [];
         }
 
+        // 2. Fetch Job Details to get Embedding ID
+        const job = await tablesDB.getRow({
+            databaseId: DB_ID,
+            tableId: 'jobs',
+            rowId: jobId
+        });
+
+        let jobEmbeddingVector = null;
+        if (job.embedding_id) {
+            try {
+                // Fetch job embedding vector from Qdrant via API
+                // Note: Since we don't have a direct "get vector" endpoint, we might need to rely on 
+                // the fact that we can't easily get the vector back from Qdrant without a specific endpoint.
+                // ALTERNATIVE: Re-generate embedding for the job description if vector is missing.
+                // For now, let's assume we can't easily get the vector back unless we stored it (which we didn't).
+                // So we will regenerate it for the search. This is slightly inefficient but works.
+
+                const textToEmbed = [
+                    job.title,
+                    job.description,
+                    job.skills?.join(', '),
+                    `Company: ${job.company || job.company_name}`,
+                    `Experience: ${job.min_experience} - ${job.max_experience} years`,
+                    `Salary: ${job.min_salary} - ${job.max_salary} ${job.currency}`
+                ].filter(Boolean).join('. ');
+
+                jobEmbeddingVector = await generateEmbedding(textToEmbed);
+            } catch (e) {
+                console.error("Failed to generate job embedding for scoring:", e);
+            }
+        }
+
+        // 3. Get Match Scores if we have a vector
+        let candidateScores: Record<string, number> = {};
+        if (jobEmbeddingVector) {
+            try {
+                const searchResponse = await fetch('/api/qdrant', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        action: 'search',
+                        collectionName: 'candidate_embeddings',
+                        vector: jobEmbeddingVector,
+                        limit: 100, // Fetch enough to cover potential candidates
+                        filter: {
+                            must: [
+                                {
+                                    key: 'candidate_id',
+                                    match: {
+                                        any: applications.rows.map((app: any) => app.candidate_id)
+                                    }
+                                }
+                            ]
+                        }
+                    })
+                });
+
+                if (searchResponse.ok) {
+                    const searchData = await searchResponse.json();
+                    searchData.result.forEach((hit: any) => {
+                        // Qdrant returns score 0-1 (cosine similarity)
+                        // Convert to percentage
+                        const candidateId = hit.payload.candidate_id;
+                        candidateScores[candidateId] = Math.round(hit.score * 100);
+                    });
+                }
+            } catch (e) {
+                console.error("Failed to fetch match scores:", e);
+            }
+        }
+
         // Fetch candidate details for each application
         const candidatePromises = applications.rows.map(async (app: any) => {
             try {
@@ -654,7 +727,7 @@ export const getJobCandidates = async (jobId: string) => {
                     ...candidate,
                     application: app,
                     status: app.status || 'Applied', // Use application status if available
-                    matchScore: candidate.matchScore || 0 // Preserve match score if it exists
+                    matchScore: candidateScores[app.candidate_id] || candidate.matchScore || 0 // Use calculated score
                 };
             } catch (e) {
                 console.error(`Failed to fetch candidate ${app.candidate_id}`, e);
@@ -663,7 +736,7 @@ export const getJobCandidates = async (jobId: string) => {
         });
 
         const candidates = await Promise.all(candidatePromises);
-        return candidates.filter(c => c !== null);
+        return candidates.filter(c => c !== null).sort((a, b) => (b!.matchScore || 0) - (a!.matchScore || 0));
     } catch (error) {
         console.error(`Error fetching candidates for job ${jobId}:`, error);
         return [];
