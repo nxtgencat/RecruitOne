@@ -690,7 +690,7 @@ export const assignCandidateToJob = async (candidateId: string, jobId: string) =
             console.warn(`Job ${jobId} has no pipeline_id. Fetching default pipeline.`);
             const pipelines = await tablesDB.listRows({
                 databaseId: DB_ID,
-                tableId: 'pipelines',
+                tableId: 'hiring_pipelines',
                 queries: [
                     Query.limit(1)
                 ]
@@ -698,10 +698,42 @@ export const assignCandidateToJob = async (candidateId: string, jobId: string) =
 
             if (pipelines.rows.length > 0) {
                 pipelineId = pipelines.rows[0].$id;
-                // Optionally update the job with this pipeline
-                // await tablesDB.updateRow({ ... })
             } else {
-                throw new Error("No pipelines found in the system");
+                console.log("No pipelines found. Creating default pipeline...");
+                // Create default pipeline
+                const newPipeline = await tablesDB.createRow({
+                    databaseId: DB_ID,
+                    tableId: 'hiring_pipelines',
+                    rowId: ID.unique(),
+                    data: {
+                        name: 'Default Pipeline',
+                        description: 'Standard hiring pipeline'
+                    }
+                });
+                pipelineId = newPipeline.$id;
+
+                // Create default stages
+                const defaultStages = [
+                    { name: 'Screening', type: 'screening', order: 1 },
+                    { name: 'Interview', type: 'interview', order: 2 },
+                    { name: 'Offer', type: 'offer', order: 3 },
+                    { name: 'Hired', type: 'hired', order: 4 },
+                    { name: 'Rejected', type: 'rejected', order: 5 }
+                ];
+
+                for (const stage of defaultStages) {
+                    await tablesDB.createRow({
+                        databaseId: DB_ID,
+                        tableId: 'pipeline_stages',
+                        rowId: ID.unique(),
+                        data: {
+                            pipeline_id: pipelineId,
+                            name: stage.name,
+                            type: stage.type,
+                            order: stage.order
+                        }
+                    });
+                }
             }
         }
 

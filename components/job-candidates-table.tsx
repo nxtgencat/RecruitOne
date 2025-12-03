@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import {
     Table,
@@ -22,20 +22,38 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Badge } from '@/components/ui/badge'
-import { MoreHorizontal, ArrowUpDown, Search, Mail, XCircle, Phone } from 'lucide-react'
-import { CANDIDATES, Candidate } from '@/lib/mock-data'
+import { MoreHorizontal, ArrowUpDown, Search, Mail, XCircle, Phone, Loader2 } from 'lucide-react'
 
 interface JobCandidatesTableProps {
     jobId: string
 }
 
 export function JobCandidatesTable({ jobId }: JobCandidatesTableProps) {
-    const [candidates, setCandidates] = useState<Candidate[]>(CANDIDATES)
+    const [candidates, setCandidates] = useState<any[]>([])
+    const [isLoading, setIsLoading] = useState(true)
     const [searchQuery, setSearchQuery] = useState('')
-    const [sortConfig, setSortConfig] = useState<{ key: keyof Candidate; direction: 'asc' | 'desc' } | null>(null)
+    const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null)
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
 
-    const handleSort = (key: keyof Candidate) => {
+    useEffect(() => {
+        const fetchCandidates = async () => {
+            setIsLoading(true)
+            try {
+                const { getJobCandidates } = await import('@/lib/clientDbService')
+                const data = await getJobCandidates(jobId)
+                setCandidates(data)
+            } catch (error) {
+                console.error("Failed to fetch job candidates:", error)
+            } finally {
+                setIsLoading(false)
+            }
+        }
+        if (jobId) {
+            fetchCandidates()
+        }
+    }, [jobId])
+
+    const handleSort = (key: string) => {
         let direction: 'asc' | 'desc' = 'asc'
         if (sortConfig && sortConfig.key === key && sortConfig.direction === 'asc') {
             direction = 'desc'
@@ -45,7 +63,7 @@ export function JobCandidatesTable({ jobId }: JobCandidatesTableProps) {
 
     const handleSelectAll = (checked: boolean) => {
         if (checked) {
-            setSelectedIds(new Set(candidates.map((c) => c.id)))
+            setSelectedIds(new Set(candidates.map((c) => c.$id)))
         } else {
             setSelectedIds(new Set())
         }
@@ -63,7 +81,7 @@ export function JobCandidatesTable({ jobId }: JobCandidatesTableProps) {
 
     const filteredCandidates = candidates
         .filter((candidate) => {
-            const fullName = candidate.name || `${candidate.firstName || ''} ${candidate.lastName || ''}`.trim()
+            const fullName = `${candidate.firstName || ''} ${candidate.lastName || ''}`.trim()
             return fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
                 (candidate.email || '').toLowerCase().includes(searchQuery.toLowerCase())
         })
@@ -82,16 +100,8 @@ export function JobCandidatesTable({ jobId }: JobCandidatesTableProps) {
             return 0
         })
 
-    const getStatusColor = (status: string) => {
-        switch (status) {
-            case 'Applied': return 'bg-blue-100 text-blue-700'
-            case 'Screening': return 'bg-yellow-100 text-yellow-700'
-            case 'Interview': return 'bg-purple-100 text-purple-700'
-            case 'Offer': return 'bg-green-100 text-green-700'
-            case 'Hired': return 'bg-emerald-100 text-emerald-700'
-            case 'Rejected': return 'bg-red-100 text-red-700'
-            default: return 'bg-gray-100 text-gray-700'
-        }
+    if (isLoading) {
+        return <div className="flex justify-center p-8"><Loader2 className="h-6 w-6 animate-spin" /></div>
     }
 
     return (
@@ -133,14 +143,14 @@ export function JobCandidatesTable({ jobId }: JobCandidatesTableProps) {
                         <DropdownMenuContent align="end">
                             <DropdownMenuLabel>Sort by</DropdownMenuLabel>
                             <DropdownMenuSeparator />
-                            <DropdownMenuItem onClick={() => handleSort('ranking')}>
-                                Ranking (High to Low)
+                            <DropdownMenuItem onClick={() => handleSort('matchScore')}>
+                                Match Score (High to Low)
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleSort('name')}>
+                            <DropdownMenuItem onClick={() => handleSort('firstName')}>
                                 Name (A-Z)
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleSort('appliedDate')}>
-                                Date Applied (Newest)
+                            <DropdownMenuItem onClick={() => handleSort('assigned_at')}>
+                                Date Assigned (Newest)
                             </DropdownMenuItem>
                         </DropdownMenuContent>
                     </DropdownMenu>
@@ -157,15 +167,15 @@ export function JobCandidatesTable({ jobId }: JobCandidatesTableProps) {
                                     onCheckedChange={(checked) => handleSelectAll(checked as boolean)}
                                 />
                             </TableHead>
-                            <TableHead className="cursor-pointer" onClick={() => handleSort('name')}>
+                            <TableHead className="cursor-pointer" onClick={() => handleSort('firstName')}>
                                 Name
                             </TableHead>
                             <TableHead>Status</TableHead>
-                            <TableHead className="cursor-pointer" onClick={() => handleSort('ranking')}>
-                                Ranking
+                            <TableHead className="cursor-pointer" onClick={() => handleSort('matchScore')}>
+                                Match Score
                             </TableHead>
-                            <TableHead className="cursor-pointer" onClick={() => handleSort('appliedDate')}>
-                                Applied Date
+                            <TableHead className="cursor-pointer" onClick={() => handleSort('assigned_at')}>
+                                Assigned Date
                             </TableHead>
                             <TableHead>Call Log</TableHead>
                             <TableHead>Response</TableHead>
@@ -175,7 +185,7 @@ export function JobCandidatesTable({ jobId }: JobCandidatesTableProps) {
                     <TableBody>
                         {filteredCandidates.length === 0 ? (
                             <TableRow>
-                                <TableCell colSpan={6} className="h-24 text-center">
+                                <TableCell colSpan={8} className="h-24 text-center">
                                     No candidates found.
                                 </TableCell>
                             </TableRow>
@@ -185,7 +195,7 @@ export function JobCandidatesTable({ jobId }: JobCandidatesTableProps) {
                                     <TableCell>
                                         <Checkbox
                                             checked={selectedIds.has(candidate.$id)}
-                                            onCheckedChange={(checked) => handleSelectRow(candidate.$id || '', checked as boolean)}
+                                            onCheckedChange={(checked) => handleSelectRow(candidate.$id, checked as boolean)}
                                         />
                                     </TableCell>
                                     <TableCell>
@@ -201,16 +211,18 @@ export function JobCandidatesTable({ jobId }: JobCandidatesTableProps) {
                                     </TableCell>
                                     <TableCell>
                                         <div className="flex items-center gap-2">
-                                            <span className="font-bold">{candidate.ranking}</span>
+                                            <span className="font-bold">{candidate.matchScore || 0}%</span>
                                             <div className="h-2 w-24 rounded-full bg-secondary">
                                                 <div
                                                     className="h-full rounded-full bg-primary"
-                                                    style={{ width: `${candidate.ranking}%` }}
+                                                    style={{ width: `${candidate.matchScore || 0}%` }}
                                                 />
                                             </div>
                                         </div>
                                     </TableCell>
-                                    <TableCell>{candidate.appliedDate}</TableCell>
+                                    <TableCell>
+                                        {candidate.application?.assigned_at ? new Date(candidate.application.assigned_at).toLocaleDateString() : '-'}
+                                    </TableCell>
                                     <TableCell>
                                         {candidate.callLog && candidate.callLog.length > 0 ? (
                                             <span className="text-xs text-muted-foreground">{candidate.callLog[candidate.callLog.length - 1]}</span>
