@@ -36,6 +36,7 @@ export function JobCandidatesTable({ jobId }: JobCandidatesTableProps) {
     const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null)
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
     const [isCalling, setIsCalling] = useState(false)
+    const [isBulkCalling, setIsBulkCalling] = useState(false)
 
     useEffect(() => {
         const fetchCandidates = async () => {
@@ -116,6 +117,81 @@ export function JobCandidatesTable({ jobId }: JobCandidatesTableProps) {
         }
     }
 
+    const handleBulkCall = async () => {
+        const selectedCandidates = candidates.filter(c => selectedIds.has(c.$id))
+        const candidatesWithPhone = selectedCandidates.filter(c => c.phone)
+
+        if (candidatesWithPhone.length === 0) {
+            toast.error('None of the selected candidates have phone numbers.')
+            return
+        }
+
+        setIsBulkCalling(true)
+        toast.info(`Starting calls to ${candidatesWithPhone.length} candidates...`)
+
+        let successCount = 0
+        let failCount = 0
+
+        for (const candidate of candidatesWithPhone) {
+            try {
+                const response = await fetch('/api/vapi/call', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        customerNumber: candidate.phone,
+                    }),
+                })
+
+                if (response.ok) {
+                    successCount++
+                    toast.success(`Call initiated to ${candidate.firstName} ${candidate.lastName}`)
+                } else {
+                    failCount++
+                    toast.error(`Failed to call ${candidate.firstName} ${candidate.lastName}`)
+                }
+
+                // Add a small delay between calls to avoid overwhelming the API
+                await new Promise(resolve => setTimeout(resolve, 1000))
+            } catch (error) {
+                failCount++
+                console.error(`Error calling ${candidate.firstName}:`, error)
+            }
+        }
+
+        setIsBulkCalling(false)
+        toast.info(`Bulk call complete: ${successCount} successful, ${failCount} failed`)
+    }
+
+    const handleEmailCandidate = (candidate: any) => {
+        if (!candidate.email) {
+            toast.error('Candidate does not have an email address.')
+            return
+        }
+
+        // Open default mail client with pre-filled recipient
+        window.location.href = `mailto:${candidate.email}?subject=Regarding Your Job Application`
+        toast.success('Opening email client...')
+    }
+
+    const handleBulkEmail = () => {
+        const selectedCandidates = candidates.filter(c => selectedIds.has(c.$id))
+        const candidatesWithEmail = selectedCandidates.filter(c => c.email)
+
+        if (candidatesWithEmail.length === 0) {
+            toast.error('None of the selected candidates have email addresses.')
+            return
+        }
+
+        // Create comma-separated list of emails for BCC (to protect privacy)
+        const emails = candidatesWithEmail.map(c => c.email).join(',')
+
+        // Open default mail client with BCC recipients
+        window.location.href = `mailto:?bcc=${emails}&subject=Regarding Your Job Application`
+        toast.success(`Opening email client for ${candidatesWithEmail.length} recipients...`)
+    }
+
     const filteredCandidates = candidates
         .filter((candidate) => {
             const fullName = `${candidate.firstName || ''} ${candidate.lastName || ''}`.trim()
@@ -156,11 +232,26 @@ export function JobCandidatesTable({ jobId }: JobCandidatesTableProps) {
                 <div className="flex items-center gap-2">
                     {selectedIds.size > 0 && (
                         <>
-                            <Button variant="outline" size="sm" className="gap-2">
-                                <Phone className="h-4 w-4" />
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                className="gap-2"
+                                onClick={handleBulkCall}
+                                disabled={isBulkCalling}
+                            >
+                                {isBulkCalling ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                    <Phone className="h-4 w-4" />
+                                )}
                                 Call ({selectedIds.size})
                             </Button>
-                            <Button variant="outline" size="sm" className="gap-2">
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                className="gap-2"
+                                onClick={handleBulkEmail}
+                            >
                                 <Mail className="h-4 w-4" />
                                 Email ({selectedIds.size})
                             </Button>
@@ -286,10 +377,22 @@ export function JobCandidatesTable({ jobId }: JobCandidatesTableProps) {
                                             </DropdownMenuTrigger>
                                             <DropdownMenuContent align="end">
                                                 <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                                                <DropdownMenuItem>View Profile</DropdownMenuItem>
-                                                <DropdownMenuItem onClick={() => handleCallCandidate(candidate)}>
+                                                <DropdownMenuItem asChild>
+                                                    <Link href={`/candidates/${candidate.$id}`}>View Profile</Link>
+                                                </DropdownMenuItem>
+                                                <DropdownMenuItem
+                                                    onClick={() => handleCallCandidate(candidate)}
+                                                    disabled={isCalling || !candidate.phone}
+                                                >
                                                     <Phone className="mr-2 h-4 w-4" />
                                                     Call Candidate
+                                                </DropdownMenuItem>
+                                                <DropdownMenuItem
+                                                    onClick={() => handleEmailCandidate(candidate)}
+                                                    disabled={!candidate.email}
+                                                >
+                                                    <Mail className="mr-2 h-4 w-4" />
+                                                    Email Candidate
                                                 </DropdownMenuItem>
                                                 <DropdownMenuItem>Edit Status</DropdownMenuItem>
                                                 <DropdownMenuSeparator />
@@ -306,3 +409,4 @@ export function JobCandidatesTable({ jobId }: JobCandidatesTableProps) {
         </div>
     )
 }
+
