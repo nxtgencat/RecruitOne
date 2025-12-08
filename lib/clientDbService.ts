@@ -1157,3 +1157,161 @@ export const moveCandidateToStage = async (applicationId: string, newStageId: st
     }
 };
 
+// ==========================================
+// Call Logs & Activity Logs
+// ==========================================
+
+export const createCallLog = async (callData: {
+    phone_number?: string;
+    direction?: 'inbound' | 'outbound';
+    status?: 'completed' | 'missed' | 'no_answer' | 'busy' | 'failed';
+    outcome?: 'interested' | 'not_interested' | 'follow_up_required' | 'voicemail' | 'callback_requested' | 'not_reachable';
+    notes?: string;
+    duration?: number;
+    related_type: 'candidate' | 'contact' | 'company';
+    related_id: string;
+}) => {
+    try {
+        await ensureAuthenticated();
+
+        const callLogId = ID.unique();
+        const now = new Date().toISOString();
+
+        const record = await tablesDB.createRow({
+            databaseId: DB_ID,
+            tableId: 'call_logs',
+            rowId: callLogId,
+            data: {
+                phone_number: callData.phone_number || null,
+                direction: callData.direction || 'outbound',
+                status: callData.status || 'completed',
+                started_at: now,
+                ended_at: now,
+                duration: callData.duration || 0,
+                outcome: callData.outcome || null,
+                notes: callData.notes || null,
+                related_type: callData.related_type,
+                related_id: callData.related_id,
+                owner_id: null // TODO: Get current user ID
+            },
+            permissions: [Permission.read(Role.any()), Permission.write(Role.any())]
+        });
+
+        // Also create an activity log entry
+        await createActivityLog({
+            action: 'call_logged',
+            entity_type: callData.related_type,
+            entity_id: callData.related_id,
+            changes: JSON.stringify({
+                outcome: callData.outcome,
+                notes: callData.notes?.substring(0, 100) // Truncate for activity feed
+            })
+        });
+
+        return record;
+    } catch (error) {
+        console.error("Error creating call log:", error);
+        throw error;
+    }
+};
+
+export const createActivityLog = async (activityData: {
+    action: string;
+    entity_type: 'candidate' | 'job' | 'company' | 'contact' | 'deal';
+    entity_id: string;
+    changes?: string;
+}) => {
+    try {
+        await ensureAuthenticated();
+
+        const activityId = ID.unique();
+
+        const record = await tablesDB.createRow({
+            databaseId: DB_ID,
+            tableId: 'activity_logs',
+            rowId: activityId,
+            data: {
+                action: activityData.action,
+                entity_type: activityData.entity_type,
+                entity_id: activityData.entity_id,
+                changes: activityData.changes || null,
+                performed_by: null // TODO: Get current user ID
+            },
+            permissions: [Permission.read(Role.any()), Permission.write(Role.any())]
+        });
+
+        return record;
+    } catch (error) {
+        console.error("Error creating activity log:", error);
+        throw error;
+    }
+};
+
+export const getCandidateActivities = async (candidateId: string) => {
+    try {
+        await ensureAuthenticated();
+
+        // Fetch call logs for this candidate
+        const callLogs = await tablesDB.listRows({
+            databaseId: DB_ID,
+            tableId: 'call_logs',
+            queries: [
+                Query.equal('related_type', 'candidate'),
+                Query.equal('related_id', candidateId),
+                Query.orderDesc('$createdAt')
+            ]
+        });
+
+        // Fetch activity logs for this candidate
+        const activityLogs = await tablesDB.listRows({
+            databaseId: DB_ID,
+            tableId: 'activity_logs',
+            queries: [
+                Query.equal('entity_type', 'candidate'),
+                Query.equal('entity_id', candidateId),
+                Query.orderDesc('$createdAt')
+            ]
+        });
+
+        // Combine and format activities
+        const activities: any[] = [];
+
+        // Add call logs
+        for (const call of callLogs.rows) {
+            activities.push({
+                id: call.$id,
+                type: 'call',
+                action: `Call ${call.outcome || call.status || 'logged'}`,
+                notes: call.notes,
+                outcome: call.outcome,
+                status: call.status,
+                timestamp: call.$createdAt,
+                icon: 'phone'
+            });
+        }
+
+        // Add activity logs
+        for (const activity of activityLogs.rows) {
+            // Skip call_logged entries as we already have them from call_logs
+            if (activity.action === 'call_logged') continue;
+
+            activities.push({
+                id: activity.$id,
+                type: 'activity',
+                action: activity.action,
+                notes: activity.changes ? JSON.parse(activity.changes)?.notes : null,
+                timestamp: activity.$createdAt,
+                icon: 'activity'
+            });
+        }
+
+        // Sort by timestamp descending
+        activities.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
+        return activities;
+    } catch (error) {
+        console.error(`Error fetching activities for candidate ${candidateId}:`, error);
+        return [];
+    }
+};
+

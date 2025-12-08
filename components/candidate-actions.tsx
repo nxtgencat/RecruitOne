@@ -68,12 +68,45 @@ export function CandidateActions({ candidateId }: CandidateActionsProps) {
         }
     }
 
-    const handleLogCall = (e: React.FormEvent) => {
+    const [isLoggingCall, setIsLoggingCall] = useState(false)
+
+    const handleLogCall = async (e: React.FormEvent) => {
         e.preventDefault()
         const formData = new FormData(e.target as HTMLFormElement)
-        console.log('Log Call:', Object.fromEntries(formData))
-        closeDialog()
+        const outcome = formData.get('outcome') as string
+        const notes = formData.get('notes') as string
+
+        setIsLoggingCall(true)
+        try {
+            const { createCallLog } = await import('@/lib/clientDbService')
+
+            // Map form outcome to database enum values
+            const outcomeMap: Record<string, string> = {
+                'connected': 'interested',
+                'left-voicemail': 'voicemail',
+                'no-answer': 'not_reachable',
+                'wrong-number': 'not_reachable'
+            }
+
+            await createCallLog({
+                outcome: outcomeMap[outcome] as any,
+                notes,
+                status: outcome === 'connected' ? 'completed' : (outcome === 'no-answer' ? 'no_answer' : 'completed'),
+                direction: 'outbound',
+                related_type: 'candidate',
+                related_id: candidateId
+            })
+
+            toast.success("Call logged successfully")
+            closeDialog()
+        } catch (error) {
+            console.error("Failed to log call:", error)
+            toast.error("Failed to log call")
+        } finally {
+            setIsLoggingCall(false)
+        }
     }
+
 
     const handleAddNote = (e: React.FormEvent) => {
         e.preventDefault()
@@ -179,7 +212,10 @@ export function CandidateActions({ candidateId }: CandidateActionsProps) {
                             <Textarea id="notes" name="notes" placeholder="Call details..." required />
                         </div>
                         <DialogFooter>
-                            <Button type="submit">Log Call</Button>
+                            <Button type="submit" disabled={isLoggingCall}>
+                                {isLoggingCall && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                Log Call
+                            </Button>
                         </DialogFooter>
                     </form>
                 </DialogContent>

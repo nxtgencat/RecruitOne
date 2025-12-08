@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
-import { Plus, Briefcase, Building2, Calendar, ArrowRight } from 'lucide-react'
+import { Plus, Briefcase, Building2, Calendar, ArrowRight, Phone, Activity } from 'lucide-react'
 import { CandidateActions } from '@/components/candidate-actions'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -80,7 +80,7 @@ function AssignedJobsList({ candidateId }: { candidateId: string }) {
                             <Briefcase className="h-5 w-5 text-primary" />
                         </div>
                         <div className="space-y-1">
-                            <Link 
+                            <Link
                                 href={`/jobs/${job.$id}`}
                                 className="font-semibold hover:underline text-foreground"
                             >
@@ -107,6 +107,101 @@ function AssignedJobsList({ candidateId }: { candidateId: string }) {
                                 <ArrowRight className="h-4 w-4" />
                             </Button>
                         </Link>
+                    </div>
+                </div>
+            ))}
+        </div>
+    )
+}
+
+// Component to display activities for a candidate
+function CandidateActivities({ candidateId }: { candidateId: string }) {
+    const [activities, setActivities] = useState<any[]>([])
+    const [isLoading, setIsLoading] = useState(true)
+
+    useEffect(() => {
+        const fetchActivities = async () => {
+            setIsLoading(true)
+            try {
+                const { getCandidateActivities } = await import('@/lib/clientDbService')
+                const data = await getCandidateActivities(candidateId)
+                setActivities(data)
+            } catch (error) {
+                console.error("Failed to fetch activities:", error)
+            } finally {
+                setIsLoading(false)
+            }
+        }
+        if (candidateId) {
+            fetchActivities()
+        }
+    }, [candidateId])
+
+    const formatDate = (dateStr: string) => {
+        if (!dateStr) return 'N/A'
+        return new Date(dateStr).toLocaleString('en-US', {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        })
+    }
+
+    const getOutcomeColor = (outcome: string) => {
+        const o = outcome?.toLowerCase() || ''
+        if (o.includes('interested')) return 'bg-green-100 text-green-800'
+        if (o.includes('not_interested')) return 'bg-red-100 text-red-800'
+        if (o.includes('follow_up')) return 'bg-yellow-100 text-yellow-800'
+        if (o.includes('voicemail')) return 'bg-blue-100 text-blue-800'
+        if (o.includes('callback')) return 'bg-purple-100 text-purple-800'
+        return 'bg-gray-100 text-gray-800'
+    }
+
+    if (isLoading) {
+        return <p className="text-muted-foreground">Loading activities...</p>
+    }
+
+    if (activities.length === 0) {
+        return (
+            <div className="text-center py-8">
+                <Activity className="h-12 w-12 mx-auto text-muted-foreground/50 mb-4" />
+                <p className="text-muted-foreground">No activities recorded yet.</p>
+                <p className="text-sm text-muted-foreground mt-1">Use the action buttons above to log calls, notes, and tasks.</p>
+            </div>
+        )
+    }
+
+    return (
+        <div className="space-y-4">
+            {activities.map((activity: any) => (
+                <div
+                    key={activity.id}
+                    className="flex items-start gap-4 p-4 border rounded-lg hover:bg-muted/50 transition-colors"
+                >
+                    <div className={`p-2 rounded-lg ${activity.type === 'call' ? 'bg-blue-100' : 'bg-gray-100'}`}>
+                        {activity.type === 'call' ? (
+                            <Phone className="h-5 w-5 text-blue-600" />
+                        ) : (
+                            <Activity className="h-5 w-5 text-gray-600" />
+                        )}
+                    </div>
+                    <div className="flex-1 space-y-1">
+                        <div className="flex items-center gap-2">
+                            <span className="font-medium">{activity.action}</span>
+                            {activity.outcome && (
+                                <Badge className={getOutcomeColor(activity.outcome)}>
+                                    {activity.outcome.replace(/_/g, ' ')}
+                                </Badge>
+                            )}
+                        </div>
+                        {activity.notes && (
+                            <p className="text-sm text-muted-foreground">{activity.notes}</p>
+                        )}
+                        <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                            <Calendar className="h-3 w-3" />
+                            <span>{formatDate(activity.timestamp)}</span>
+                        </div>
                     </div>
                 </div>
             ))}
@@ -204,7 +299,7 @@ export default function CandidateDetailPage() {
                             <CardTitle>Activities</CardTitle>
                         </CardHeader>
                         <CardContent>
-                            <p className="text-muted-foreground">Activity log will appear here.</p>
+                            <CandidateActivities candidateId={id} />
                         </CardContent>
                     </Card>
                 </TabsContent>
