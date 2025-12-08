@@ -539,7 +539,11 @@ export const createJob = async (jobData: any) => {
             company: jobData.company || jobData.company_name
         });
 
-        return record;
+        // Return the record with company_name attached for immediate display
+        return {
+            ...record,
+            company_name: jobData.company_name || jobData.company || null
+        };
     } catch (error) {
         console.error("Error creating job:", error);
         throw error;
@@ -566,14 +570,34 @@ export const getCandidates = async () => {
 export const getJobs = async () => {
     try {
         await ensureAuthenticated();
-        const result = await tablesDB.listRows({
-            databaseId: DB_ID,
-            tableId: 'jobs',
-            queries: [
-                Query.orderDesc('$createdAt')
-            ]
+        const [jobsResult, companiesResult] = await Promise.all([
+            tablesDB.listRows({
+                databaseId: DB_ID,
+                tableId: 'jobs',
+                queries: [
+                    Query.orderDesc('$createdAt')
+                ]
+            }),
+            tablesDB.listRows({
+                databaseId: DB_ID,
+                tableId: 'companies',
+                queries: []
+            })
+        ]);
+
+        // Create a map of company_id to company name
+        const companyMap = new Map<string, string>();
+        companiesResult.rows.forEach((company: any) => {
+            companyMap.set(company.$id, company.name);
         });
-        return result.rows;
+
+        // Add company_name to each job
+        const jobsWithCompanyNames = jobsResult.rows.map((job: any) => ({
+            ...job,
+            company_name: job.company_id ? companyMap.get(job.company_id) || 'Unknown Company' : null
+        }));
+
+        return jobsWithCompanyNames;
     } catch (error) {
         console.error("Error fetching jobs:", error);
         return [];
