@@ -364,6 +364,210 @@ function HiringPipeline({ jobId }: { jobId: string }) {
 }
 
 
+// Email Composer Component for sending emails to candidates by pipeline stage
+function EmailComposer({ jobId, job }: { jobId: string; job: any }) {
+    const [pipelineData, setPipelineData] = useState<any>(null)
+    const [isLoading, setIsLoading] = useState(true)
+    const [selectedStage, setSelectedStage] = useState<string>('all')
+    const [candidates, setCandidates] = useState<any[]>([])
+    const [emailPurpose, setEmailPurpose] = useState<string>('follow_up')
+    const [isGenerating, setIsGenerating] = useState(false)
+    const [customInstructions, setCustomInstructions] = useState('')
+    const [emailSubject, setEmailSubject] = useState('')
+    const [emailBody, setEmailBody] = useState('')
+
+    useEffect(() => {
+        const fetchPipeline = async () => {
+            try {
+                const { getJobPipelineWithCandidates } = await import('@/lib/clientDbService')
+                const data = await getJobPipelineWithCandidates(jobId)
+                setPipelineData(data)
+            } catch (error) {
+                console.error("Failed to fetch pipeline:", error)
+            } finally {
+                setIsLoading(false)
+            }
+        }
+        fetchPipeline()
+    }, [jobId])
+
+    // Get recipients when stage changes
+    useEffect(() => {
+        if (!pipelineData) return
+
+        let allCandidates: any[] = []
+        if (selectedStage === 'all') {
+            Object.values(pipelineData.candidatesByStage).forEach((stageCandidates: any) => {
+                allCandidates = [...allCandidates, ...stageCandidates]
+            })
+        } else {
+            allCandidates = pipelineData.candidatesByStage[selectedStage] || []
+        }
+        setCandidates(allCandidates.filter((c: any) => c.email))
+    }, [selectedStage, pipelineData])
+
+    const handleGenerateEmail = async () => {
+        setIsGenerating(true)
+        try {
+            const { generateEmail } = await import('@/lib/clientDbService')
+            const stageName = selectedStage === 'all'
+                ? 'All Stages'
+                : pipelineData?.stages?.find((s: any) => s.$id === selectedStage)?.name || 'Current Stage'
+
+            const result = await generateEmail({
+                jobTitle: job.title,
+                companyName: job.company || job.company_name || 'Company',
+                pipelineStage: stageName,
+                purpose: emailPurpose as any,
+                customInstructions: emailPurpose === 'custom' ? customInstructions : undefined
+            })
+
+            setEmailSubject(result.subject)
+            setEmailBody(result.body)
+            toast.success('Email generated successfully!')
+        } catch (error) {
+            console.error('Error generating email:', error)
+            toast.error('Failed to generate email')
+        } finally {
+            setIsGenerating(false)
+        }
+    }
+
+    const handleSendEmail = () => {
+        if (candidates.length === 0) {
+            toast.error('No recipients with email addresses')
+            return
+        }
+        if (!emailSubject || !emailBody) {
+            toast.error('Please generate or write an email first')
+            return
+        }
+
+        // Build mailto link with BCC for privacy
+        const emails = candidates.map(c => c.email).join(',')
+        const encodedSubject = encodeURIComponent(emailSubject)
+        const encodedBody = encodeURIComponent(emailBody)
+
+        window.location.href = `mailto:?bcc=${emails}&subject=${encodedSubject}&body=${encodedBody}`
+        toast.success(`Opening email client for ${candidates.length} recipients...`)
+    }
+
+    if (isLoading) {
+        return <p className="text-muted-foreground">Loading...</p>
+    }
+
+    const stages = pipelineData?.stages || []
+
+    return (
+        <div className="space-y-6">
+            {/* Stage & Purpose Selection */}
+            <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                    <Label>Pipeline Stage</Label>
+                    <Select value={selectedStage} onValueChange={setSelectedStage}>
+                        <SelectTrigger>
+                            <SelectValue placeholder="Select stage" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">All Stages</SelectItem>
+                            {stages.map((stage: any) => (
+                                <SelectItem key={stage.$id} value={stage.$id}>
+                                    {stage.name} ({(pipelineData?.candidatesByStage[stage.$id] || []).filter((c: any) => c.email).length})
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                </div>
+                <div className="space-y-2">
+                    <Label>Email Purpose</Label>
+                    <Select value={emailPurpose} onValueChange={setEmailPurpose}>
+                        <SelectTrigger>
+                            <SelectValue placeholder="Select purpose" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="application_received">Application Received</SelectItem>
+                            <SelectItem value="interview_invite">Interview Invitation</SelectItem>
+                            <SelectItem value="follow_up">Follow Up</SelectItem>
+                            <SelectItem value="offer">Job Offer</SelectItem>
+                            <SelectItem value="rejection">Rejection</SelectItem>
+                            <SelectItem value="custom">Custom</SelectItem>
+                        </SelectContent>
+                    </Select>
+                </div>
+            </div>
+
+            {/* Custom Instructions */}
+            {emailPurpose === 'custom' && (
+                <div className="space-y-2">
+                    <Label>Custom Instructions for AI</Label>
+                    <Textarea
+                        value={customInstructions}
+                        onChange={(e) => setCustomInstructions(e.target.value)}
+                        placeholder="Describe what you want the email to convey..."
+                        rows={2}
+                    />
+                </div>
+            )}
+
+            {/* Recipients Preview */}
+            <div className="p-3 bg-muted/50 rounded-lg">
+                <p className="text-sm text-muted-foreground">
+                    <Mail className="inline w-4 h-4 mr-1" />
+                    {candidates.length} recipient{candidates.length !== 1 ? 's' : ''} with email
+                    {candidates.length > 0 && (
+                        <span className="ml-2">
+                            ({candidates.slice(0, 3).map(c => c.firstName || c.email).join(', ')}
+                            {candidates.length > 3 && ` and ${candidates.length - 3} more`})
+                        </span>
+                    )}
+                </p>
+            </div>
+
+            {/* Generate Button */}
+            <Button onClick={handleGenerateEmail} disabled={isGenerating} className="w-full">
+                {isGenerating ? (
+                    <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Generating with AI...
+                    </>
+                ) : (
+                    <>
+                        <ArrowRight className="w-4 h-4 mr-2" />
+                        Generate Email with AI
+                    </>
+                )}
+            </Button>
+
+            {/* Email Preview/Edit */}
+            {(emailSubject || emailBody) && (
+                <div className="space-y-4 border rounded-lg p-4">
+                    <div className="space-y-2">
+                        <Label>Subject</Label>
+                        <Input
+                            value={emailSubject}
+                            onChange={(e) => setEmailSubject(e.target.value)}
+                            placeholder="Email subject"
+                        />
+                    </div>
+                    <div className="space-y-2">
+                        <Label>Body</Label>
+                        <Textarea
+                            value={emailBody}
+                            onChange={(e) => setEmailBody(e.target.value)}
+                            rows={10}
+                            placeholder="Email body"
+                        />
+                    </div>
+                    <Button onClick={handleSendEmail} className="w-full" variant="default">
+                        <Mail className="w-4 h-4 mr-2" />
+                        Open Email Client to Send
+                    </Button>
+                </div>
+            )}
+        </div>
+    )
+}
+
 
 export default function JobDetailPage() {
     const params = useParams()
@@ -477,6 +681,7 @@ export default function JobDetailPage() {
                     <TabsTrigger value="details">Job Details</TabsTrigger>
                     <TabsTrigger value="candidates">Candidates</TabsTrigger>
                     <TabsTrigger value="pipeline">Hiring Pipeline</TabsTrigger>
+                    <TabsTrigger value="email">Email</TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="details" className="mt-6">
@@ -636,6 +841,17 @@ export default function JobDetailPage() {
                         </CardHeader>
                         <CardContent>
                             <HiringPipeline jobId={id} />
+                        </CardContent>
+                    </Card>
+                </TabsContent>
+
+                <TabsContent value="email" className="mt-6">
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Email Candidates</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <EmailComposer jobId={id} job={job} />
                         </CardContent>
                     </Card>
                 </TabsContent>

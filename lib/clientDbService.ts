@@ -328,6 +328,76 @@ export const generateJobDescription = async (jobDetails: any) => {
     }
 };
 
+export const generateEmail = async (emailContext: {
+    jobTitle: string;
+    companyName: string;
+    pipelineStage: string;
+    candidateName?: string;
+    purpose: 'interview_invite' | 'rejection' | 'offer' | 'follow_up' | 'application_received' | 'custom';
+    customInstructions?: string;
+}) => {
+    try {
+        const purposeDescriptions: Record<string, string> = {
+            interview_invite: 'Inviting the candidate for an interview',
+            rejection: 'Politely rejecting the candidate with encouragement for future opportunities',
+            offer: 'Extending a job offer to the candidate',
+            follow_up: 'Following up with the candidate about their application status',
+            application_received: 'Confirming receipt of the application and next steps',
+            custom: emailContext.customInstructions || 'General communication'
+        };
+
+        const prompt = `Generate a professional recruitment email with the following context:
+
+Job Title: ${emailContext.jobTitle}
+Company: ${emailContext.companyName}
+Pipeline Stage: ${emailContext.pipelineStage}
+${emailContext.candidateName ? `Candidate Name: ${emailContext.candidateName}` : 'Recipient: Candidate'}
+
+Purpose: ${purposeDescriptions[emailContext.purpose]}
+${emailContext.customInstructions ? `Additional Instructions: ${emailContext.customInstructions}` : ''}
+
+Generate the email in this JSON format:
+{
+  "subject": "Email subject line",
+  "body": "Email body text (plain text, use \\n for line breaks)"
+}
+
+Requirements:
+- Professional but warm tone
+- Clear and concise
+- Include appropriate greeting and sign-off
+- Use placeholders like [Candidate Name] if name not provided
+- Do not include markdown formatting, just plain text`;
+
+        const result = await ai.models.generateContent({
+            model: "gemini-2.5-flash-lite",
+            contents: [{ role: "user", parts: [{ text: prompt }] }]
+        });
+
+        let text = '';
+        if (result.candidates?.[0]?.content?.parts?.[0]?.text) {
+            text = result.candidates[0].content.parts[0].text;
+        } else if (result.text) {
+            text = result.text;
+        }
+
+        // Parse the JSON response
+        const jsonMatch = text.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+            return JSON.parse(jsonMatch[0]);
+        }
+
+        // Fallback if JSON parsing fails
+        return {
+            subject: `Regarding ${emailContext.jobTitle} Position at ${emailContext.companyName}`,
+            body: text
+        };
+    } catch (error) {
+        console.error("Error generating email:", error);
+        throw error;
+    }
+};
+
 // ==========================================
 // Qdrant Services (SDK)
 // ==========================================
