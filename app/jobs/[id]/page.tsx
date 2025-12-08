@@ -3,7 +3,8 @@
 import { useState, useEffect } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
-import { Users, ChevronRight, ChevronLeft, User, Mail, Phone, MoreVertical, ArrowRight, ArrowLeft, Check } from 'lucide-react'
+import { Users, ChevronRight, ChevronLeft, User, Mail, Phone, MoreVertical, ArrowRight, ArrowLeft, Check, Loader2, Edit, Save, X } from 'lucide-react'
+import { toast } from 'sonner'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -370,6 +371,9 @@ export default function JobDetailPage() {
 
     const [job, setJob] = useState<any>(null)
     const [isLoading, setIsLoading] = useState(true)
+    const [isEditMode, setIsEditMode] = useState(false)
+    const [isSaving, setIsSaving] = useState(false)
+    const [editForm, setEditForm] = useState<any>({})
 
     useEffect(() => {
         const fetchJob = async () => {
@@ -389,6 +393,46 @@ export default function JobDetailPage() {
         }
     }, [id])
 
+    // Initialize edit form when job loads
+    useEffect(() => {
+        if (job) {
+            setEditForm({
+                title: job.title || '',
+                status: job.status || 'Open',
+                description: job.description || '',
+                city: job.city || '',
+                state: job.state || '',
+                min_salary: job.min_salary || job.minSalary || 0,
+                max_salary: job.max_salary || job.maxSalary || 0,
+                openings: job.openings || 1,
+                skills: Array.isArray(job.skills) ? job.skills.join(', ') : (job.skills || '')
+            })
+        }
+    }, [job])
+
+    const handleSave = async () => {
+        setIsSaving(true)
+        try {
+            const { updateJob } = await import('@/lib/clientDbService')
+            const dataToSave = {
+                ...editForm,
+                min_salary: parseInt(editForm.min_salary) || 0,
+                max_salary: parseInt(editForm.max_salary) || 0,
+                openings: parseInt(editForm.openings) || 1,
+                skills: editForm.skills ? editForm.skills.split(',').map((s: string) => s.trim()) : []
+            }
+            const updated = await updateJob(id, dataToSave)
+            setJob({ ...job, ...updated })
+            setIsEditMode(false)
+            toast.success('Job updated successfully')
+        } catch (error) {
+            console.error('Failed to save job:', error)
+            toast.error('Failed to save changes')
+        } finally {
+            setIsSaving(false)
+        }
+    }
+
     if (isLoading) {
         return <div className="p-8">Loading job details...</div>
     }
@@ -405,8 +449,26 @@ export default function JobDetailPage() {
                     <p className="text-muted-foreground">{job.company || job.company_name}</p>
                 </div>
                 <div className="flex gap-2">
-                    <Button variant="outline">Edit</Button>
-                    <Button variant="destructive">Delete</Button>
+                    {isEditMode ? (
+                        <>
+                            <Button variant="outline" onClick={() => setIsEditMode(false)} disabled={isSaving}>
+                                <X className="w-4 h-4 mr-2" />
+                                Cancel
+                            </Button>
+                            <Button onClick={handleSave} disabled={isSaving}>
+                                {isSaving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+                                Save
+                            </Button>
+                        </>
+                    ) : (
+                        <>
+                            <Button variant="outline" onClick={() => setIsEditMode(true)}>
+                                <Edit className="w-4 h-4 mr-2" />
+                                Edit
+                            </Button>
+                            <Button variant="destructive">Delete</Button>
+                        </>
+                    )}
                 </div>
             </div>
 
@@ -422,47 +484,136 @@ export default function JobDetailPage() {
                         <CardHeader>
                             <CardTitle>Job Details</CardTitle>
                         </CardHeader>
-                        <CardContent className="space-y-6">
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="space-y-2">
-                                    <Label>Title</Label>
-                                    <Input defaultValue={job.title} />
-                                </div>
-                                <div className="space-y-2">
-                                    <Label>Company</Label>
-                                    <Input defaultValue={job.company || job.company_name} />
-                                </div>
-                                <div className="space-y-2">
-                                    <Label>Status</Label>
-                                    <Input defaultValue={job.status} />
-                                </div>
-                                <div className="space-y-2">
-                                    <Label>Owner</Label>
-                                    <Input defaultValue={job.owner_id} />
-                                </div>
-                            </div>
+                        <CardContent>
+                            {isEditMode ? (
+                                /* Edit Mode - Form Inputs */
+                                <div className="space-y-6">
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div className="space-y-2">
+                                            <Label>Title</Label>
+                                            <Input
+                                                value={editForm.title || ''}
+                                                onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label>Status</Label>
+                                            <Input
+                                                value={editForm.status || ''}
+                                                onChange={(e) => setEditForm({ ...editForm, status: e.target.value })}
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label>City</Label>
+                                            <Input
+                                                value={editForm.city || ''}
+                                                onChange={(e) => setEditForm({ ...editForm, city: e.target.value })}
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label>Skills (comma separated)</Label>
+                                            <Input
+                                                value={editForm.skills || ''}
+                                                onChange={(e) => setEditForm({ ...editForm, skills: e.target.value })}
+                                                placeholder="React, Node.js, TypeScript..."
+                                            />
+                                        </div>
+                                    </div>
 
-                            <div className="space-y-2">
-                                <Label>Description</Label>
-                                <div className="border rounded-md p-4 min-h-[100px] bg-muted/30">
-                                    <MarkdownRenderer content={job.description || job.jobDescription} />
-                                </div>
-                            </div>
+                                    <div className="space-y-2">
+                                        <Label>Description</Label>
+                                        <Textarea
+                                            value={editForm.description || ''}
+                                            onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                                            rows={8}
+                                        />
+                                    </div>
 
-                            <div className="grid grid-cols-3 gap-4">
-                                <div className="space-y-2">
-                                    <Label>Min Salary</Label>
-                                    <Input defaultValue={job.min_salary || job.minSalary} type="number" />
+                                    <div className="grid grid-cols-3 gap-4">
+                                        <div className="space-y-2">
+                                            <Label>Min Salary</Label>
+                                            <Input
+                                                type="number"
+                                                value={editForm.min_salary || 0}
+                                                onChange={(e) => setEditForm({ ...editForm, min_salary: e.target.value })}
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label>Max Salary</Label>
+                                            <Input
+                                                type="number"
+                                                value={editForm.max_salary || 0}
+                                                onChange={(e) => setEditForm({ ...editForm, max_salary: e.target.value })}
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label>Openings</Label>
+                                            <Input
+                                                type="number"
+                                                value={editForm.openings || 1}
+                                                onChange={(e) => setEditForm({ ...editForm, openings: e.target.value })}
+                                            />
+                                        </div>
+                                    </div>
                                 </div>
-                                <div className="space-y-2">
-                                    <Label>Max Salary</Label>
-                                    <Input defaultValue={job.max_salary || job.maxSalary} type="number" />
+                            ) : (
+                                /* View Mode - Clean Display */
+                                <div className="space-y-6">
+                                    <div className="grid grid-cols-2 gap-6">
+                                        <div>
+                                            <p className="text-sm text-muted-foreground mb-1">Title</p>
+                                            <p className="font-medium text-lg">{job.title}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-sm text-muted-foreground mb-1">Company</p>
+                                            <p className="font-medium">{job.company || job.company_name || '-'}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-sm text-muted-foreground mb-1">Status</p>
+                                            <Badge variant={job.status === 'Open' ? 'default' : 'secondary'}>
+                                                {job.status}
+                                            </Badge>
+                                        </div>
+                                        <div>
+                                            <p className="text-sm text-muted-foreground mb-1">Location</p>
+                                            <p className="font-medium">
+                                                {[job.city, job.state].filter(Boolean).join(', ') || '-'}
+                                            </p>
+                                        </div>
+                                        <div>
+                                            <p className="text-sm text-muted-foreground mb-1">Salary Range</p>
+                                            <p className="font-medium">
+                                                {(job.min_salary || job.max_salary)
+                                                    ? `$${job.min_salary || 0} - $${job.max_salary || 0}`
+                                                    : '-'}
+                                            </p>
+                                        </div>
+                                        <div>
+                                            <p className="text-sm text-muted-foreground mb-1">Openings</p>
+                                            <p className="font-medium">{job.openings || 1}</p>
+                                        </div>
+                                    </div>
+
+                                    <div>
+                                        <p className="text-sm text-muted-foreground mb-2">Skills</p>
+                                        <div className="flex flex-wrap gap-2">
+                                            {Array.isArray(job.skills) && job.skills.length > 0
+                                                ? job.skills.map((skill: string, idx: number) => (
+                                                    <Badge key={idx} variant="secondary">{skill}</Badge>
+                                                ))
+                                                : <span className="text-muted-foreground">No skills listed</span>
+                                            }
+                                        </div>
+                                    </div>
+
+                                    <div>
+                                        <p className="text-sm text-muted-foreground mb-2">Description</p>
+                                        <div className="border rounded-md p-4 bg-muted/30">
+                                            <MarkdownRenderer content={job.description || job.jobDescription} />
+                                        </div>
+                                    </div>
                                 </div>
-                                <div className="space-y-2">
-                                    <Label>Openings</Label>
-                                    <Input defaultValue={job.openings} type="number" />
-                                </div>
-                            </div>
+                            )}
                         </CardContent>
                     </Card>
                 </TabsContent>
@@ -488,7 +639,7 @@ export default function JobDetailPage() {
                         </CardContent>
                     </Card>
                 </TabsContent>
-            </Tabs>
-        </div>
+            </Tabs >
+        </div >
     )
 }

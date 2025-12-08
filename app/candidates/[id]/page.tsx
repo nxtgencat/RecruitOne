@@ -3,7 +3,8 @@
 import { useState, useEffect } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
-import { Plus, Briefcase, Building2, Calendar, ArrowRight, Phone, Activity } from 'lucide-react'
+import { Plus, Briefcase, Building2, Calendar, ArrowRight, Phone, Activity, Loader2, Edit, Save, X } from 'lucide-react'
+import { toast } from 'sonner'
 import { CandidateActions } from '@/components/candidate-actions'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -236,6 +237,48 @@ export default function CandidateDetailPage() {
 
     const [questions, setQuestions] = useState<any[]>([])
     const [isGeneratingQuestions, setIsGeneratingQuestions] = useState(false)
+    const [isEditMode, setIsEditMode] = useState(false)
+    const [isSaving, setIsSaving] = useState(false)
+    const [editForm, setEditForm] = useState<any>({})
+
+    // Initialize edit form when candidate loads or edit mode is enabled
+    useEffect(() => {
+        if (candidate) {
+            setEditForm({
+                firstName: candidate.firstName || '',
+                lastName: candidate.lastName || '',
+                email: candidate.email || '',
+                phone: candidate.phone || '',
+                city: candidate.city || '',
+                state: candidate.state || '',
+                country: candidate.country || '',
+                title: candidate.title || '',
+                current_organization: candidate.current_organization || '',
+                skills: Array.isArray(candidate.skills) ? candidate.skills.join(', ') : (candidate.skills || ''),
+                summary: candidate.summary || ''
+            })
+        }
+    }, [candidate])
+
+    const handleSave = async () => {
+        setIsSaving(true)
+        try {
+            const { updateCandidate } = await import('@/lib/clientDbService')
+            const dataToSave = {
+                ...editForm,
+                skills: editForm.skills ? editForm.skills.split(',').map((s: string) => s.trim()) : []
+            }
+            const updated = await updateCandidate(id, dataToSave)
+            setCandidate({ ...candidate, ...updated })
+            setIsEditMode(false)
+            toast.success('Candidate updated successfully')
+        } catch (error) {
+            console.error('Failed to save candidate:', error)
+            toast.error('Failed to save changes')
+        } finally {
+            setIsSaving(false)
+        }
+    }
 
     const handleGenerateQuestions = async () => {
         setIsGeneratingQuestions(true)
@@ -271,8 +314,26 @@ export default function CandidateDetailPage() {
                         <p className="text-muted-foreground">{candidate.email}</p>
                     </div>
                     <div className="flex gap-2">
-                        <Button variant="outline">Edit</Button>
-                        <Button variant="destructive">Delete</Button>
+                        {isEditMode ? (
+                            <>
+                                <Button variant="outline" onClick={() => setIsEditMode(false)} disabled={isSaving}>
+                                    <X className="w-4 h-4 mr-2" />
+                                    Cancel
+                                </Button>
+                                <Button onClick={handleSave} disabled={isSaving}>
+                                    {isSaving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+                                    Save
+                                </Button>
+                            </>
+                        ) : (
+                            <>
+                                <Button variant="outline" onClick={() => setIsEditMode(true)}>
+                                    <Edit className="w-4 h-4 mr-2" />
+                                    Edit
+                                </Button>
+                                <Button variant="destructive">Delete</Button>
+                            </>
+                        )}
                     </div>
                 </div>
 
@@ -309,53 +370,148 @@ export default function CandidateDetailPage() {
                         <CardHeader>
                             <CardTitle>Candidate Details</CardTitle>
                         </CardHeader>
-                        <CardContent className="space-y-6">
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="space-y-2">
-                                    <Label>Name</Label>
-                                    <Input defaultValue={`${candidate.firstName} ${candidate.lastName}`} />
-                                </div>
-                                <div className="space-y-2">
-                                    <Label>Email</Label>
-                                    <Input defaultValue={candidate.email} />
-                                </div>
-                                <div className="space-y-2">
-                                    <Label>Phone</Label>
-                                    <Input defaultValue={candidate.phone || ''} />
-                                </div>
-                                <div className="space-y-2">
-                                    <Label>Gender</Label>
-                                    <Input defaultValue={candidate.gender || ''} />
-                                </div>
-                                <div className="space-y-2">
-                                    <Label>Skills</Label>
-                                    <Input defaultValue={Array.isArray(candidate.skills) ? candidate.skills.join(', ') : candidate.skills} />
-                                </div>
-                                <div className="space-y-2">
-                                    <Label>Owner</Label>
-                                    <Input defaultValue={candidate.owner_id || ''} />
-                                </div>
-                            </div>
+                        <CardContent>
+                            {isEditMode ? (
+                                /* Edit Mode - Form Inputs */
+                                <div className="space-y-6">
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div className="space-y-2">
+                                            <Label>First Name</Label>
+                                            <Input
+                                                value={editForm.firstName || ''}
+                                                onChange={(e) => setEditForm({ ...editForm, firstName: e.target.value })}
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label>Last Name</Label>
+                                            <Input
+                                                value={editForm.lastName || ''}
+                                                onChange={(e) => setEditForm({ ...editForm, lastName: e.target.value })}
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label>Email</Label>
+                                            <Input
+                                                value={editForm.email || ''}
+                                                onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label>Phone</Label>
+                                            <Input
+                                                value={editForm.phone || ''}
+                                                onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label>Title</Label>
+                                            <Input
+                                                value={editForm.title || ''}
+                                                onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label>Organization</Label>
+                                            <Input
+                                                value={editForm.current_organization || ''}
+                                                onChange={(e) => setEditForm({ ...editForm, current_organization: e.target.value })}
+                                            />
+                                        </div>
+                                        <div className="col-span-2 space-y-2">
+                                            <Label>Skills (comma separated)</Label>
+                                            <Input
+                                                value={editForm.skills || ''}
+                                                onChange={(e) => setEditForm({ ...editForm, skills: e.target.value })}
+                                                placeholder="React, Node.js, TypeScript..."
+                                            />
+                                        </div>
+                                    </div>
 
-                            <div className="space-y-2">
-                                <Label>Full Address</Label>
-                                <Textarea defaultValue={candidate.address || ''} />
-                            </div>
+                                    <div className="grid grid-cols-3 gap-4">
+                                        <div className="space-y-2">
+                                            <Label>City</Label>
+                                            <Input
+                                                value={editForm.city || ''}
+                                                onChange={(e) => setEditForm({ ...editForm, city: e.target.value })}
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label>State</Label>
+                                            <Input
+                                                value={editForm.state || ''}
+                                                onChange={(e) => setEditForm({ ...editForm, state: e.target.value })}
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label>Country</Label>
+                                            <Input
+                                                value={editForm.country || ''}
+                                                onChange={(e) => setEditForm({ ...editForm, country: e.target.value })}
+                                            />
+                                        </div>
+                                    </div>
 
-                            <div className="grid grid-cols-3 gap-4">
-                                <div className="space-y-2">
-                                    <Label>City</Label>
-                                    <Input defaultValue={candidate.city || ''} />
+                                    <div className="space-y-2">
+                                        <Label>Summary</Label>
+                                        <Textarea
+                                            value={editForm.summary || ''}
+                                            onChange={(e) => setEditForm({ ...editForm, summary: e.target.value })}
+                                            rows={4}
+                                        />
+                                    </div>
                                 </div>
-                                <div className="space-y-2">
-                                    <Label>State</Label>
-                                    <Input defaultValue={candidate.state || ''} />
+                            ) : (
+                                /* View Mode - Clean Display */
+                                <div className="space-y-6">
+                                    <div className="grid grid-cols-2 gap-6">
+                                        <div>
+                                            <p className="text-sm text-muted-foreground mb-1">Name</p>
+                                            <p className="font-medium">{candidate.firstName} {candidate.lastName}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-sm text-muted-foreground mb-1">Email</p>
+                                            <p className="font-medium">{candidate.email || '-'}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-sm text-muted-foreground mb-1">Phone</p>
+                                            <p className="font-medium">{candidate.phone || '-'}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-sm text-muted-foreground mb-1">Title</p>
+                                            <p className="font-medium">{candidate.title || '-'}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-sm text-muted-foreground mb-1">Organization</p>
+                                            <p className="font-medium">{candidate.current_organization || '-'}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-sm text-muted-foreground mb-1">Location</p>
+                                            <p className="font-medium">
+                                                {[candidate.city, candidate.state, candidate.country].filter(Boolean).join(', ') || '-'}
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    <div>
+                                        <p className="text-sm text-muted-foreground mb-2">Skills</p>
+                                        <div className="flex flex-wrap gap-2">
+                                            {Array.isArray(candidate.skills) && candidate.skills.length > 0
+                                                ? candidate.skills.map((skill: string, idx: number) => (
+                                                    <Badge key={idx} variant="secondary">{skill}</Badge>
+                                                ))
+                                                : <span className="text-muted-foreground">No skills listed</span>
+                                            }
+                                        </div>
+                                    </div>
+
+                                    {candidate.summary && (
+                                        <div>
+                                            <p className="text-sm text-muted-foreground mb-1">Summary</p>
+                                            <p className="text-sm leading-relaxed">{candidate.summary}</p>
+                                        </div>
+                                    )}
                                 </div>
-                                <div className="space-y-2">
-                                    <Label>Country</Label>
-                                    <Input defaultValue={candidate.country || ''} />
-                                </div>
-                            </div>
+                            )}
                         </CardContent>
                     </Card>
                 </TabsContent>

@@ -684,6 +684,74 @@ export const getCandidate = async (id: string) => {
     }
 };
 
+export const updateCandidate = async (id: string, candidateData: any) => {
+    try {
+        await ensureAuthenticated();
+
+        // Map input data to database fields
+        const updateData: any = {};
+
+        if (candidateData.firstName !== undefined) updateData.firstName = candidateData.firstName;
+        if (candidateData.lastName !== undefined) updateData.lastName = candidateData.lastName;
+        if (candidateData.email !== undefined) updateData.email = candidateData.email;
+        if (candidateData.phone !== undefined) updateData.phone = candidateData.phone;
+        if (candidateData.city !== undefined) updateData.city = candidateData.city;
+        if (candidateData.state !== undefined) updateData.state = candidateData.state;
+        if (candidateData.country !== undefined) updateData.country = candidateData.country;
+        if (candidateData.title !== undefined) updateData.title = candidateData.title;
+        if (candidateData.current_organization !== undefined) updateData.current_organization = candidateData.current_organization;
+        if (candidateData.skills !== undefined) updateData.skills = candidateData.skills;
+        if (candidateData.summary !== undefined) updateData.summary = candidateData.summary;
+        if (candidateData.hotlist !== undefined) updateData.hotlist = candidateData.hotlist;
+
+        const result = await tablesDB.updateRow({
+            databaseId: DB_ID,
+            tableId: 'candidates',
+            rowId: id,
+            data: updateData
+        });
+
+        return result;
+    } catch (error) {
+        console.error(`Error updating candidate ${id}:`, error);
+        throw error;
+    }
+};
+
+export const updateJob = async (id: string, jobData: any) => {
+    try {
+        await ensureAuthenticated();
+
+        // Map input data to database fields
+        const updateData: any = {};
+
+        if (jobData.title !== undefined) updateData.title = jobData.title;
+        if (jobData.status !== undefined) updateData.status = jobData.status;
+        if (jobData.description !== undefined) updateData.description = jobData.description;
+        if (jobData.city !== undefined) updateData.city = jobData.city;
+        if (jobData.state !== undefined) updateData.state = jobData.state;
+        if (jobData.location_type !== undefined) updateData.location_type = jobData.location_type;
+        if (jobData.min_experience !== undefined) updateData.min_experience = jobData.min_experience;
+        if (jobData.max_experience !== undefined) updateData.max_experience = jobData.max_experience;
+        if (jobData.min_salary !== undefined) updateData.min_salary = jobData.min_salary;
+        if (jobData.max_salary !== undefined) updateData.max_salary = jobData.max_salary;
+        if (jobData.openings !== undefined) updateData.openings = jobData.openings;
+        if (jobData.skills !== undefined) updateData.skills = jobData.skills;
+
+        const result = await tablesDB.updateRow({
+            databaseId: DB_ID,
+            tableId: 'jobs',
+            rowId: id,
+            data: updateData
+        });
+
+        return result;
+    } catch (error) {
+        console.error(`Error updating job ${id}:`, error);
+        throw error;
+    }
+};
+
 export const getJob = async (id: string) => {
     try {
         await ensureAuthenticated();
