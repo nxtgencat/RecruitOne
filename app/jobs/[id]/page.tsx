@@ -13,6 +13,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
 import { JobCandidatesTable } from '@/components/job-candidates-table'
+import { MarkdownRenderer } from '@/components/markdown-renderer'
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -347,8 +348,8 @@ function HiringPipeline({ jobId }: { jobId: string }) {
                             key={stage.$id}
                             onClick={() => setFilterStage(stage.$id === filterStage ? 'all' : stage.$id)}
                             className={`p-3 rounded-lg border text-left transition-colors ${filterStage === stage.$id
-                                    ? 'bg-primary/10 border-primary'
-                                    : 'hover:bg-muted'
+                                ? 'bg-primary/10 border-primary'
+                                : 'hover:bg-muted'
                                 }`}
                         >
                             <p className="text-2xl font-bold">{count}</p>
@@ -443,7 +444,9 @@ export default function JobDetailPage() {
 
                             <div className="space-y-2">
                                 <Label>Description</Label>
-                                <Textarea defaultValue={job.description || job.jobDescription} className="min-h-[100px]" />
+                                <div className="border rounded-md p-4 min-h-[100px] bg-muted/30">
+                                    <MarkdownRenderer content={job.description || job.jobDescription} />
+                                </div>
                             </div>
 
                             <div className="grid grid-cols-3 gap-4">

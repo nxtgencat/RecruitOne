@@ -17,6 +17,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Wand2, Loader2 } from 'lucide-react'
+import { MarkdownRenderer } from '@/components/markdown-renderer'
 
 interface CreateJobDialogProps {
   open: boolean
@@ -33,6 +34,7 @@ export function CreateJobDialog({
   const [isCreating, setIsCreating] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [companies, setCompanies] = useState<any[]>([])
+  const [jdViewMode, setJdViewMode] = useState<'preview' | 'edit'>('preview')
 
   const [formData, setFormData] = useState({
     title: '',
@@ -271,13 +273,50 @@ export function CreateJobDialog({
                 )}
               </Button>
             </div>
-            <Textarea
-              id="jobDescription"
-              value={formData.jobDescription}
-              onChange={(e) => setFormData({ ...formData, jobDescription: e.target.value })}
-              className="min-h-[150px]"
-            />
+            {formData.jobDescription ? (
+              <div className="space-y-2">
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant={jdViewMode === 'preview' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setJdViewMode('preview')}
+                  >
+                    Preview
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={jdViewMode === 'edit' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setJdViewMode('edit')}
+                  >
+                    Edit
+                  </Button>
+                </div>
+                {jdViewMode === 'edit' ? (
+                  <Textarea
+                    id="jobDescription"
+                    value={formData.jobDescription}
+                    onChange={(e) => setFormData({ ...formData, jobDescription: e.target.value })}
+                    className="min-h-[200px] font-mono text-sm"
+                  />
+                ) : (
+                  <div className="border rounded-md p-4 max-h-[300px] overflow-y-auto bg-muted/30">
+                    <MarkdownRenderer content={formData.jobDescription} />
+                  </div>
+                )}
+              </div>
+            ) : (
+              <Textarea
+                id="jobDescription"
+                value={formData.jobDescription}
+                onChange={(e) => setFormData({ ...formData, jobDescription: e.target.value })}
+                className="min-h-[150px]"
+                placeholder="Enter job description or generate with AI..."
+              />
+            )}
           </div>
+
 
           <div className="grid grid-cols-3 gap-4">
             <div className="space-y-2">
