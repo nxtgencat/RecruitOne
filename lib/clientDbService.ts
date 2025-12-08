@@ -972,4 +972,188 @@ export const assignCandidateToJob = async (candidateId: string, jobId: string) =
     }
 };
 
+export const getJobPipelineWithCandidates = async (jobId: string) => {
+    try {
+        await ensureAuthenticated();
+
+        // 1. Get the job to find the pipeline_id
+        const job = await tablesDB.getRow({
+            databaseId: DB_ID,
+            tableId: 'jobs',
+            rowId: jobId
+        });
+
+        if (!job) throw new Error("Job not found");
+
+        let pipelineId = job.pipeline_id;
+
+        // If no pipeline assigned, try to get default or return empty
+        if (!pipelineId) {
+            const pipelines = await tablesDB.listRows({
+                databaseId: DB_ID,
+                tableId: 'hiring_pipelines',
+                queries: [Query.limit(1)]
+            });
+
+            if (pipelines.rows.length > 0) {
+                pipelineId = pipelines.rows[0].$id;
+            } else {
+                return { pipeline: null, stages: [], candidates: {} };
+            }
+        }
+
+        // 2. Get pipeline details
+        let pipeline = null;
+        try {
+            pipeline = await tablesDB.getRow({
+                databaseId: DB_ID,
+                tableId: 'hiring_pipelines',
+                rowId: pipelineId
+            });
+        } catch (e) {
+            console.error("Failed to fetch pipeline:", e);
+        }
+
+        // 3. Get all stages for this pipeline
+        const stagesResult = await tablesDB.listRows({
+            databaseId: DB_ID,
+            tableId: 'pipeline_stages',
+            queries: [
+                Query.equal('pipeline_id', pipelineId),
+                Query.orderAsc('order')
+            ]
+        });
+
+        const stages = stagesResult.rows;
+
+        // 4. Get all applications for this job
+        const applications = await tablesDB.listRows({
+            databaseId: DB_ID,
+            tableId: 'applications',
+            queries: [
+                Query.equal('job_id', jobId)
+            ]
+        });
+
+        // 5. For each application, fetch candidate details
+        const candidatesByStage: Record<string, any[]> = {};
+
+        // Initialize empty arrays for each stage
+        for (const stage of stages) {
+            candidatesByStage[stage.$id] = [];
+        }
+
+        // Fetch candidate details and group by stage
+        for (const app of applications.rows) {
+            try {
+                const candidate = await tablesDB.getRow({
+                    databaseId: DB_ID,
+                    tableId: 'candidates',
+                    rowId: app.candidate_id
+                });
+
+                if (candidate && app.current_stage_id) {
+                    if (!candidatesByStage[app.current_stage_id]) {
+                        candidatesByStage[app.current_stage_id] = [];
+                    }
+                    candidatesByStage[app.current_stage_id].push({
+                        ...candidate,
+                        application: app
+                    });
+                }
+            } catch (e) {
+                console.error(`Failed to fetch candidate ${app.candidate_id}:`, e);
+            }
+        }
+
+        return {
+            pipeline,
+            stages,
+            candidatesByStage
+        };
+    } catch (error) {
+        console.error(`Error fetching pipeline for job ${jobId}:`, error);
+        return { pipeline: null, stages: [], candidatesByStage: {} };
+    }
+};
+
+export const moveCandidateToStage = async (applicationId: string, newStageId: string) => {
+    try {
+        await ensureAuthenticated();
+
+        // 1. Get the current application to record history
+        const application = await tablesDB.getRow({
+            databaseId: DB_ID,
+            tableId: 'applications',
+            rowId: applicationId
+        });
+
+        if (!application) throw new Error("Application not found");
+
+        const previousStageId = application.current_stage_id;
+
+        // 2. Update the application with the new stage
+        const updatedApplication = await tablesDB.updateRow({
+            databaseId: DB_ID,
+            tableId: 'applications',
+            rowId: applicationId,
+            data: {
+                current_stage_id: newStageId
+            }
+        });
+
+        // 3. Record stage history (exit previous stage)
+        if (previousStageId) {
+            try {
+                // Try to update the previous stage history entry with exit time
+                const historyEntries = await tablesDB.listRows({
+                    databaseId: DB_ID,
+                    tableId: 'stage_history',
+                    queries: [
+                        Query.equal('candidate_id', application.candidate_id),
+                        Query.equal('job_id', application.job_id),
+                        Query.equal('stage_id', previousStageId),
+                        Query.isNull('exited_at'),
+                        Query.limit(1)
+                    ]
+                });
+
+                if (historyEntries.rows.length > 0) {
+                    await tablesDB.updateRow({
+                        databaseId: DB_ID,
+                        tableId: 'stage_history',
+                        rowId: historyEntries.rows[0].$id,
+                        data: {
+                            exited_at: new Date().toISOString()
+                        }
+                    });
+                }
+            } catch (e) {
+                console.error("Failed to update previous stage history:", e);
+            }
+        }
+
+        // 4. Create new stage history entry
+        try {
+            await tablesDB.createRow({
+                databaseId: DB_ID,
+                tableId: 'stage_history',
+                rowId: ID.unique(),
+                data: {
+                    candidate_id: application.candidate_id,
+                    job_id: application.job_id,
+                    stage_id: newStageId,
+                    entered_at: new Date().toISOString()
+                }
+            });
+        } catch (e) {
+            console.error("Failed to create stage history entry:", e);
+        }
+
+        return updatedApplication;
+    } catch (error) {
+        console.error("Error moving candidate to stage:", error);
+        throw error;
+    }
+};
 
