@@ -233,8 +233,20 @@ export default function CandidatesPage() {
             <CreateCandidateDialog
                 open={openDialog}
                 onOpenChange={setOpenDialog}
-                onCandidateCreate={(newCandidate) => {
-                    setCandidates([newCandidate, ...candidates])
+                onCandidateCreate={async (newCandidate) => {
+                    if (newCandidate) {
+                        // Single candidate added
+                        setCandidates([newCandidate, ...candidates])
+                    } else {
+                        // Bulk import completed, refetch all
+                        try {
+                            const { getCandidates } = await import('@/lib/clientDbService')
+                            const data = await getCandidates()
+                            setCandidates(data)
+                        } catch (error) {
+                            console.error("Failed to refresh candidates:", error)
+                        }
+                    }
                     setOpenDialog(false)
                 }}
             />
