@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from 'react'
 import { useParams } from 'next/navigation'
-import { Plus } from 'lucide-react'
+import Link from 'next/link'
+import { Plus, Briefcase, Building2, Calendar, ArrowRight } from 'lucide-react'
 import { CandidateActions } from '@/components/candidate-actions'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -10,6 +11,108 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { Badge } from '@/components/ui/badge'
+
+// Component to display assigned jobs for a candidate
+function AssignedJobsList({ candidateId }: { candidateId: string }) {
+    const [jobs, setJobs] = useState<any[]>([])
+    const [isLoading, setIsLoading] = useState(true)
+
+    useEffect(() => {
+        const fetchAssignedJobs = async () => {
+            setIsLoading(true)
+            try {
+                const { getCandidateJobs } = await import('@/lib/clientDbService')
+                const data = await getCandidateJobs(candidateId)
+                setJobs(data)
+            } catch (error) {
+                console.error("Failed to fetch assigned jobs:", error)
+            } finally {
+                setIsLoading(false)
+            }
+        }
+        if (candidateId) {
+            fetchAssignedJobs()
+        }
+    }, [candidateId])
+
+    if (isLoading) {
+        return <p className="text-muted-foreground">Loading assigned jobs...</p>
+    }
+
+    if (jobs.length === 0) {
+        return (
+            <div className="text-center py-8">
+                <Briefcase className="h-12 w-12 mx-auto text-muted-foreground/50 mb-4" />
+                <p className="text-muted-foreground">No jobs assigned to this candidate yet.</p>
+            </div>
+        )
+    }
+
+    const formatDate = (dateStr: string) => {
+        if (!dateStr) return 'N/A'
+        return new Date(dateStr).toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric'
+        })
+    }
+
+    const getStageColor = (stageName: string) => {
+        const stage = stageName?.toLowerCase() || ''
+        if (stage.includes('screen')) return 'bg-blue-100 text-blue-800'
+        if (stage.includes('interview')) return 'bg-purple-100 text-purple-800'
+        if (stage.includes('offer')) return 'bg-green-100 text-green-800'
+        if (stage.includes('hired')) return 'bg-emerald-100 text-emerald-800'
+        if (stage.includes('reject')) return 'bg-red-100 text-red-800'
+        return 'bg-gray-100 text-gray-800'
+    }
+
+    return (
+        <div className="space-y-4">
+            {jobs.map((job: any) => (
+                <div
+                    key={job.$id}
+                    className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors"
+                >
+                    <div className="flex items-start gap-4">
+                        <div className="p-2 bg-primary/10 rounded-lg">
+                            <Briefcase className="h-5 w-5 text-primary" />
+                        </div>
+                        <div className="space-y-1">
+                            <Link 
+                                href={`/jobs/${job.$id}`}
+                                className="font-semibold hover:underline text-foreground"
+                            >
+                                {job.title}
+                            </Link>
+                            {job.companyName && (
+                                <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                                    <Building2 className="h-3.5 w-3.5" />
+                                    <span>{job.companyName}</span>
+                                </div>
+                            )}
+                            <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                                <Calendar className="h-3.5 w-3.5" />
+                                <span>Assigned: {formatDate(job.assignedAt)}</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                        <Badge className={getStageColor(job.stageName)}>
+                            {job.stageName}
+                        </Badge>
+                        <Link href={`/jobs/${job.$id}`}>
+                            <Button variant="ghost" size="icon">
+                                <ArrowRight className="h-4 w-4" />
+                            </Button>
+                        </Link>
+                    </div>
+                </div>
+            ))}
+        </div>
+    )
+}
 
 export default function CandidateDetailPage() {
     const params = useParams()
@@ -168,7 +271,7 @@ export default function CandidateDetailPage() {
                             <CardTitle>Assigned Jobs</CardTitle>
                         </CardHeader>
                         <CardContent>
-                            <p className="text-muted-foreground">List of assigned jobs.</p>
+                            <AssignedJobsList candidateId={id} />
                         </CardContent>
                     </Card>
                 </TabsContent>

@@ -675,6 +675,84 @@ export const getJob = async (id: string) => {
     }
 };
 
+export const getCandidateJobs = async (candidateId: string) => {
+    try {
+        await ensureAuthenticated();
+
+        // Fetch all applications for this candidate
+        const applications = await tablesDB.listRows({
+            databaseId: DB_ID,
+            tableId: 'applications',
+            queries: [
+                Query.equal('candidate_id', candidateId)
+            ]
+        });
+
+        if (applications.rows.length === 0) {
+            return [];
+        }
+
+        // Fetch job details and pipeline stage for each application
+        const jobPromises = applications.rows.map(async (app: any) => {
+            try {
+                // Get job details
+                const job = await tablesDB.getRow({
+                    databaseId: DB_ID,
+                    tableId: 'jobs',
+                    rowId: app.job_id
+                });
+
+                // Get current stage details
+                let stageName = 'Applied';
+                if (app.current_stage_id) {
+                    try {
+                        const stage = await tablesDB.getRow({
+                            databaseId: DB_ID,
+                            tableId: 'pipeline_stages',
+                            rowId: app.current_stage_id
+                        });
+                        stageName = stage?.name || 'Applied';
+                    } catch (e) {
+                        console.error(`Failed to fetch stage ${app.current_stage_id}`, e);
+                    }
+                }
+
+                // Get company details if available
+                let companyName = null;
+                if (job?.company_id) {
+                    try {
+                        const company = await tablesDB.getRow({
+                            databaseId: DB_ID,
+                            tableId: 'companies',
+                            rowId: job.company_id
+                        });
+                        companyName = company?.name || null;
+                    } catch (e) {
+                        console.error(`Failed to fetch company ${job.company_id}`, e);
+                    }
+                }
+
+                return {
+                    ...job,
+                    application: app,
+                    stageName,
+                    companyName,
+                    assignedAt: app.assigned_at
+                };
+            } catch (e) {
+                console.error(`Failed to fetch job ${app.job_id}`, e);
+                return null;
+            }
+        });
+
+        const jobs = await Promise.all(jobPromises);
+        return jobs.filter(j => j !== null);
+    } catch (error) {
+        console.error(`Error fetching jobs for candidate ${candidateId}:`, error);
+        return [];
+    }
+};
+
 export const getJobCandidates = async (jobId: string) => {
     try {
         await ensureAuthenticated();
