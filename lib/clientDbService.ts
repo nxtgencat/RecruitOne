@@ -1324,12 +1324,17 @@ export const moveCandidateToStage = async (applicationId: string, newStageId: st
 // ==========================================
 
 export const createCallLog = async (callData: {
+    vapi_call_id?: string;
     phone_number?: string;
     direction?: 'inbound' | 'outbound';
-    status?: 'completed' | 'missed' | 'no_answer' | 'busy' | 'failed';
+    status?: 'queued' | 'ringing' | 'in-progress' | 'forwarding' | 'ended' | 'completed' | 'missed' | 'no_answer' | 'busy' | 'failed';
     outcome?: 'interested' | 'not_interested' | 'follow_up_required' | 'voicemail' | 'callback_requested' | 'not_reachable';
     notes?: string;
     duration?: number;
+    recording_url?: string;
+    transcript?: string;
+    summary?: string;
+    cost?: number;
     related_type: 'candidate' | 'contact' | 'company';
     related_id: string;
 }) => {
@@ -1344,14 +1349,19 @@ export const createCallLog = async (callData: {
             tableId: 'call_logs',
             rowId: callLogId,
             data: {
+                vapi_call_id: callData.vapi_call_id || null,
                 phone_number: callData.phone_number || null,
                 direction: callData.direction || 'outbound',
-                status: callData.status || 'completed',
+                status: null, // Status will be updated when call ends
                 started_at: now,
-                ended_at: now,
+                ended_at: null,
                 duration: callData.duration || 0,
                 outcome: callData.outcome || null,
                 notes: callData.notes || null,
+                recording_url: callData.recording_url || null,
+                transcript: callData.transcript || null,
+                summary: callData.summary || null,
+                cost: callData.cost || null,
                 related_type: callData.related_type,
                 related_id: callData.related_id,
                 owner_id: null // TODO: Get current user ID
@@ -1361,12 +1371,12 @@ export const createCallLog = async (callData: {
 
         // Also create an activity log entry
         await createActivityLog({
-            action: 'call_logged',
+            action: 'call_initiated',
             entity_type: callData.related_type,
             entity_id: callData.related_id,
             changes: JSON.stringify({
-                outcome: callData.outcome,
-                notes: callData.notes?.substring(0, 100) // Truncate for activity feed
+                vapi_call_id: callData.vapi_call_id,
+                phone_number: callData.phone_number
             })
         });
 
@@ -1376,6 +1386,120 @@ export const createCallLog = async (callData: {
         throw error;
     }
 };
+
+export const updateCallLogWithAnalytics = async (callLogId: string, analytics: {
+    status?: string;
+    outcome?: string;
+    duration?: number;
+    started_at?: string;
+    ended_at?: string;
+    recording_url?: string;
+    transcript?: string;
+    summary?: string;
+    cost?: number;
+}) => {
+    try {
+        await ensureAuthenticated();
+
+        const updateData: any = {};
+        if (analytics.status !== undefined) updateData.status = analytics.status;
+        if (analytics.outcome !== undefined) updateData.outcome = analytics.outcome;
+        if (analytics.duration !== undefined) updateData.duration = analytics.duration;
+        if (analytics.started_at !== undefined) updateData.started_at = analytics.started_at;
+        if (analytics.ended_at !== undefined) updateData.ended_at = analytics.ended_at;
+        if (analytics.recording_url !== undefined) updateData.recording_url = analytics.recording_url;
+        if (analytics.transcript !== undefined) updateData.transcript = analytics.transcript;
+        if (analytics.summary !== undefined) updateData.summary = analytics.summary;
+        if (analytics.cost !== undefined) updateData.cost = analytics.cost;
+
+        const record = await tablesDB.updateRow({
+            databaseId: DB_ID,
+            tableId: 'call_logs',
+            rowId: callLogId,
+            data: updateData
+        });
+
+        return record;
+    } catch (error) {
+        console.error("Error updating call log with analytics:", error);
+        throw error;
+    }
+};
+
+export const getCallLogByVapiId = async (vapiCallId: string) => {
+    try {
+        await ensureAuthenticated();
+
+        const result = await tablesDB.listRows({
+            databaseId: DB_ID,
+            tableId: 'call_logs',
+            queries: [
+                Query.equal('vapi_call_id', vapiCallId),
+                Query.limit(1)
+            ]
+        });
+
+        return result.rows.length > 0 ? result.rows[0] : null;
+    } catch (error) {
+        console.error(`Error fetching call log by VAPI ID ${vapiCallId}:`, error);
+        return null;
+    }
+};
+
+export const getCandidateCallLogs = async (candidateId: string) => {
+    try {
+        await ensureAuthenticated();
+
+        const result = await tablesDB.listRows({
+            databaseId: DB_ID,
+            tableId: 'call_logs',
+            queries: [
+                Query.equal('related_type', 'candidate'),
+                Query.equal('related_id', candidateId),
+                Query.orderDesc('$createdAt')
+            ]
+        });
+
+        return result.rows;
+    } catch (error) {
+        console.error(`Error fetching call logs for candidate ${candidateId}:`, error);
+        return [];
+    }
+};
+
+// Get the latest call log for each candidate in a list
+export const getLatestCallLogsForCandidates = async (candidateIds: string[]) => {
+    try {
+        await ensureAuthenticated();
+
+        if (candidateIds.length === 0) return {};
+
+        const result = await tablesDB.listRows({
+            databaseId: DB_ID,
+            tableId: 'call_logs',
+            queries: [
+                Query.equal('related_type', 'candidate'),
+                Query.orderDesc('$createdAt'),
+                Query.limit(500) // Get recent call logs
+            ]
+        });
+
+        // Group by candidate and get latest (first due to orderDesc)
+        const latestByCandidate: Record<string, any> = {};
+        for (const row of result.rows) {
+            const candidateId = row.related_id;
+            if (candidateIds.includes(candidateId) && !latestByCandidate[candidateId]) {
+                latestByCandidate[candidateId] = row;
+            }
+        }
+
+        return latestByCandidate;
+    } catch (error) {
+        console.error('Error fetching call logs for candidates:', error);
+        return {};
+    }
+};
+
 
 export const createActivityLog = async (activityData: {
     action: string;

@@ -22,8 +22,9 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Badge } from '@/components/ui/badge'
-import { MoreHorizontal, ArrowUpDown, Search, Mail, XCircle, Phone, Loader2 } from 'lucide-react'
+import { MoreHorizontal, ArrowUpDown, Search, Mail, XCircle, Phone, Loader2, PhoneCall } from 'lucide-react'
 import { toast } from 'sonner'
+import { CallAnalyticsDialog } from '@/components/call-analytics-dialog'
 
 interface JobCandidatesTableProps {
     jobId: string
@@ -38,13 +39,34 @@ export function JobCandidatesTable({ jobId }: JobCandidatesTableProps) {
     const [isCalling, setIsCalling] = useState(false)
     const [isBulkCalling, setIsBulkCalling] = useState(false)
 
+    // Call analytics state
+    const [candidateCalls, setCandidateCalls] = useState<Record<string, string>>({})
+    const [callAnalyticsOpen, setCallAnalyticsOpen] = useState(false)
+    const [selectedCallId, setSelectedCallId] = useState<string | null>(null)
+    const [selectedCandidateName, setSelectedCandidateName] = useState('')
+
     useEffect(() => {
         const fetchCandidates = async () => {
             setIsLoading(true)
             try {
-                const { getJobCandidates } = await import('@/lib/clientDbService')
+                const { getJobCandidates, getLatestCallLogsForCandidates } = await import('@/lib/clientDbService')
                 const data = await getJobCandidates(jobId)
                 setCandidates(data)
+
+                // Fetch latest call logs for all candidates
+                if (data.length > 0) {
+                    const candidateIds = data.map((c: any) => c.$id)
+                    const callLogs = await getLatestCallLogsForCandidates(candidateIds)
+
+                    // Map candidate IDs to their VAPI call IDs
+                    const callsMap: Record<string, string> = {}
+                    for (const [candidateId, callLog] of Object.entries(callLogs)) {
+                        if ((callLog as any).vapi_call_id) {
+                            callsMap[candidateId] = (callLog as any).vapi_call_id
+                        }
+                    }
+                    setCandidateCalls(callsMap)
+                }
             } catch (error) {
                 console.error("Failed to fetch job candidates:", error)
             } finally {
@@ -99,6 +121,8 @@ export function JobCandidatesTable({ jobId }: JobCandidatesTableProps) {
                 },
                 body: JSON.stringify({
                     customerNumber: candidate.phone,
+                    candidateId: candidate.$id,
+                    candidateName: `${candidate.firstName} ${candidate.lastName}`,
                 }),
             })
 
@@ -108,6 +132,23 @@ export function JobCandidatesTable({ jobId }: JobCandidatesTableProps) {
                 throw new Error(data.error || 'Failed to initiate call')
             }
 
+            // Store the call ID for this candidate
+            setCandidateCalls(prev => ({ ...prev, [candidate.$id]: data.callId }))
+
+            // Create a call log in the database
+            try {
+                const { createCallLog } = await import('@/lib/clientDbService')
+                await createCallLog({
+                    vapi_call_id: data.callId,
+                    phone_number: candidate.phone,
+                    direction: 'outbound',
+                    related_type: 'candidate',
+                    related_id: candidate.$id,
+                })
+            } catch (logError) {
+                console.error('Failed to create call log:', logError)
+            }
+
             toast.success('Call initiated successfully!')
         } catch (error: any) {
             console.error('Error calling candidate:', error)
@@ -115,6 +156,12 @@ export function JobCandidatesTable({ jobId }: JobCandidatesTableProps) {
         } finally {
             setIsCalling(false)
         }
+    }
+
+    const openCallAnalytics = (callId: string, candidateName: string) => {
+        setSelectedCallId(callId)
+        setSelectedCandidateName(candidateName)
+        setCallAnalyticsOpen(true)
     }
 
     const handleBulkCall = async () => {
@@ -352,7 +399,20 @@ export function JobCandidatesTable({ jobId }: JobCandidatesTableProps) {
                                         {candidate.application?.assigned_at ? new Date(candidate.application.assigned_at).toLocaleDateString() : '-'}
                                     </TableCell>
                                     <TableCell>
-                                        {candidate.callLog && candidate.callLog.length > 0 ? (
+                                        {candidateCalls[candidate.$id] ? (
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                className="gap-1"
+                                                onClick={() => openCallAnalytics(
+                                                    candidateCalls[candidate.$id],
+                                                    `${candidate.firstName} ${candidate.lastName}`
+                                                )}
+                                            >
+                                                <PhoneCall className="h-3 w-3" />
+                                                View Call
+                                            </Button>
+                                        ) : candidate.callLog && candidate.callLog.length > 0 ? (
                                             <span className="text-xs text-muted-foreground">{candidate.callLog[candidate.callLog.length - 1]}</span>
                                         ) : (
                                             <span className="text-xs text-muted-foreground">-</span>
@@ -406,6 +466,14 @@ export function JobCandidatesTable({ jobId }: JobCandidatesTableProps) {
                     </TableBody>
                 </Table>
             </div>
+
+            {/* Call Analytics Dialog */}
+            <CallAnalyticsDialog
+                open={callAnalyticsOpen}
+                onOpenChange={setCallAnalyticsOpen}
+                callId={selectedCallId || ''}
+                candidateName={selectedCandidateName}
+            />
         </div>
     )
 }

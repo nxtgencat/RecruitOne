@@ -257,20 +257,24 @@ const schema = {
     },
     call_logs: {
         columns: [
+            { type: 'string', key: 'vapi_call_id', size: 100 },
             { type: 'string', key: 'phone_number', size: 50 },
             { type: 'enum', key: 'direction', elements: ['inbound', 'outbound'] },
-            { type: 'enum', key: 'status', elements: ['completed', 'missed', 'no_answer', 'busy', 'failed'] },
+            { type: 'enum', key: 'status', elements: ['queued', 'ringing', 'in-progress', 'forwarding', 'ended', 'completed', 'missed', 'no_answer', 'busy', 'failed'] },
             { type: 'datetime', key: 'started_at' },
             { type: 'datetime', key: 'ended_at' },
             { type: 'integer', key: 'duration' }, // in seconds
             { type: 'enum', key: 'outcome', elements: ['interested', 'not_interested', 'follow_up_required', 'voicemail', 'callback_requested', 'not_reachable'] },
             { type: 'string', key: 'notes', size: 2000 },
-            { type: 'string', key: 'recording_url', size: 255 },
+            { type: 'string', key: 'transcript', size: 50000 },
+            { type: 'string', key: 'summary', size: 5000 },
+            { type: 'float', key: 'cost' },
             { type: 'enum', key: 'related_type', elements: ['candidate', 'contact', 'company'] },
             { type: 'string', key: 'related_id', size: 36 },
             { type: 'string', key: 'owner_id', size: 36 }
         ],
         indexes: [
+            { key: 'vapi_call_idx', columns: ['vapi_call_id'] },
             { key: 'started_at_idx', columns: ['started_at'], orders: ['DESC'] },
             { key: 'status_idx', columns: ['status'] },
             { key: 'related_idx', columns: ['related_type', 'related_id'] },
